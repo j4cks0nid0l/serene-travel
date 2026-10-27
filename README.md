@@ -85,3 +85,4 @@ Tài liệu nền tảng:
 ## V2.4.1: giao diện đăng nhập
 
 Làm mới màn hình đăng nhập, bổ sung hiện/ẩn mật khẩu và sửa đường dẫn CSS/JS tương đối. File `../serene-travel-admin-preview.html` là bản duyệt độc lập, không cần mật khẩu, không gửi nội dung lên mạng. Mã mô phỏng chỉ nằm trong file xem thử ngoài thư mục public; trang quản trị triển khai vẫn yêu cầu đăng nhập qua API.
+Phiên bản website: V2.5
