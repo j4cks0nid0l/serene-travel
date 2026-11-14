@@ -7,7 +7,7 @@ header{display:flex;gap:16px;align-items:center;background:var(--paper);padding:
 header .brand{white-space:nowrap;display:flex;align-items:center;gap:11px;text-decoration:none;color:var(--teal);font:600 24px 'Playfair Display',Georgia,serif}
 header .brand img{width:38px;height:38px;object-fit:contain;border-radius:8px}
 header .header-note{color:var(--muted);font-size:13px;padding-left:16px;border-left:1px solid var(--line)}
-header .view-site{margin-left:auto;color:var(--teal);font-size:14px;font-weight:500;text-underline-offset:4px}
+header .booking-link{margin-left:auto;color:#fff;background:var(--teal);font-size:14px;font-weight:500;text-decoration:none;padding:8px 14px;border-radius:8px;white-space:nowrap}header .booking-link[hidden]{display:none}header .booking-link:not([hidden])~.view-site{margin-left:0}header .view-site{margin-left:auto;color:var(--teal);font-size:14px;font-weight:500;text-underline-offset:4px}
 header button{margin-left:0}
 main{max-width:1500px;margin:auto;padding:24px 28px 70px}
 button,.file-button{font:inherit;font-size:14px;font-weight:500;cursor:pointer;border:1px solid #8FB0B4;background:#fff;color:var(--ink);border-radius:10px;padding:9px 16px;min-height:42px;transition:background .15s,border-color .15s}
