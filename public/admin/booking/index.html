@@ -263,9 +263,12 @@ async function syncFromSheet() {
     const data = await apiBooking("GET");
     bookings = Array.isArray(data.bookings) ? data.bookings : [];
     loaded = true;
+    const auto = autoComplete();
     $("bk-count").textContent = bookings.length;
     showSyncStatus("");
+    renderList();
     if (selId) showDetail(selId);
+    if (auto) save();
   } catch(e) {
     showSyncStatus("⚠️ Không tải được dữ liệu: " + e.message, true);
     console.error(e);
@@ -504,7 +507,7 @@ function renderList(){
   w.innerHTML=[...bookings].reverse().map(b=>{
     const paid=b.payments.reduce((a,p)=>a+p.amount,0), remain=b.totalAmt-paid;
     const pct=b.totalAmt?Math.min(100,Math.round(paid/b.totalAmt*100)):0;
-    const badge=remain<=0?'<span class="badge b-done">Đã TT đủ</span>':paid>0?'<span class="badge b-partial">Đã cọc</span>':'<span class="badge b-wait">Chờ cọc</span>';
+    const badge=b.status==="completed"?'<span class="badge b-done">Đã hoàn thành</span>':remain<=0?'<span class="badge b-done">Đã TT đủ</span>':paid>0?'<span class="badge b-partial">Đã cọc</span>':'<span class="badge b-wait">Chờ thanh toán</span>';
     return `<div class="bk-item${selId===b.id?" sel":""}" onclick="toggleDetail('${b.id}')">
       <div class="bk-top"><div><div class="bk-id">${b.id}</div><div class="bk-name">${b.name}</div><div class="bk-phone">${b.phone}</div></div>${badge}</div>
       <div class="prog"><div class="prog-fill" style="width:${pct}%"></div></div>
@@ -570,7 +573,7 @@ function showDetail(id){
 
   <div class="card">
     <div class="sec-title"><i class="ti ti-credit-card"></i>Xác nhận thanh toán</div>
-    ${b.status!=="completed"?`
+    ${(b.status!=="completed"||remain>0)?`
     <div class="pay-confirm-section">
       <button class="pay-confirm-btn btn-confirm-coc" onclick="confirmPayment('${id}','coc50')">💰 Xác nhận đã nhận cọc 50% — ${VND(Math.round(b.totalAmt*0.5))}</button>
       <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end;margin-bottom:8px">
@@ -607,6 +610,12 @@ function showDetail(id){
     <div id="profit-summary-${id}" style="margin-top:10px"></div>
   </div>
 
+  <div class="card">
+    <div class="sec-title"><i class="ti ti-send"></i>Phiếu điều hành gửi đối tác</div>
+    ${b.svcs.map((s,si)=>`<button class="btn-outline" style="width:100%;margin-bottom:6px;text-align:left" onclick="copyDH('${id}',${si})"><i class="ti ti-copy"></i>Copy ĐH: ${s.name}</button>`).join("")}
+    <div style="font-size:11px;color:#7A8FA0;margin-top:2px">Mỗi dịch vụ là một tin nhắn riêng. Cần nhập giá net ở mục trên trước.</div>
+  </div>
+
   <div class="act-row" style="grid-template-columns:1fr 1fr 1fr">
     <button class="btn-outline" onclick="copyText('${id}')"><i class="ti ti-copy"></i>Copy Zalo</button>
     <button class="btn-calendar" onclick="addToCalendar('${id}')"><i class="ti ti-calendar-plus"></i>Calendar</button>
@@ -633,7 +642,7 @@ function confirmPayment(id, type) {
   if(!amt){ toast("Số tiền không hợp lệ!"); return; }
   b.payments.push({amount:amt,type:label,date:today});
   const totalPaid=b.payments.reduce((a,p)=>a+p.amount,0);
-  b.status=totalPaid>=b.totalAmt?"done":totalPaid>0?"partial":"pending";
+  if(b.status!=="completed") b.status=totalPaid>=b.totalAmt?"done":totalPaid>0?"partial":"pending";
   save(); toast("✅ Đã xác nhận nhận "+VND(amt));
   renderList(); showDetail(id);
 }
@@ -701,19 +710,70 @@ function getRemainText(b) {
   return "";
 }
 
+// Ngày check in / check out của 1 dịch vụ. Chỉ có 1 ngày thì check out = check in (vé trong ngày).
+function stayInfo(s){
+  const dIn=s.dateIn||s.dateOut||"", dOut=s.dateOut||s.dateIn||"";
+  if(!dIn) return null;
+  const t1=parseDate6(dIn), t2=parseDate6(dOut);
+  const nights=(t1&&t2&&diffDays(t1,t2)>0)?diffDays(t1,t2):0;
+  return {dIn, dOut, nights};
+}
+function qtyText(s){
+  let t=`${s.qty1} ${s.unit1||""}`.trim();
+  if(s.qty2!==null&&s.qty2!==undefined&&s.unit2!=="đêm") t+=` x ${s.qty2} ${s.unit2||""}`;
+  return t.trim();
+}
+function guestBullets(b){
+  const list=b.guests?b.guests.split("\n").map(g=>g.trim()).filter(Boolean):[];
+  return (list.length?list:[b.name]).map(g=>"  • "+g);
+}
+function copyToClipboard(txt, okMsg){
+  navigator.clipboard.writeText(txt).then(()=>toast(okMsg)).catch(()=>toast("Copy thất bại"));
+}
+
 function copyText(id){
   const b=bookings.find(x=>x.id===id); if(!b) return;
   const paid=b.payments.reduce((a,p)=>a+p.amount,0);
-  const gl=b.guests?"\nDanh sách khách:\n"+b.guests.split("\n").filter(g=>g.trim()).map(g=>"  • "+g.trim()).join("\n"):"";
-  const svl=b.svcs.map(s=>{
-    const datePart = s.dateIn&&s.dateOut&&s.dateIn!==s.dateOut ? `[${s.dateIn} - ${s.dateOut}] ` : s.dateIn ? `[${s.dateIn}] ` : "";
-    const c2part = s.qty2!==null&&s.qty2!==undefined ? ` x ${s.qty2} ${s.unit2||""}` : "";
-    return `  • ${datePart}${s.name}: ${s.qty1} ${s.unit1||""}${c2part} x ${VNDn(s.price)} đ = ${VNDn(s.total)} đ`;
-  }).join("\n");
+  const gl=b.guests&&b.guests.trim()?"\nDanh sách khách:\n"+guestBullets(b).join("\n"):"";
+  const blocks=b.svcs.map(s=>{
+    const st=stayInfo(s);
+    let t=s.name;
+    if(st){ t+=`\nCheck in: ${st.dIn}\nCheck out: ${st.dOut}${st.nights?` (${st.nights} đêm)`:""}`; }
+    t+=`\nSố lượng: ${qtyText(s)}`;
+    return t;
+  }).join("\n\n");
   const payLine = paid>0?`\n💰 Cần đặt cọc: ${VND(paid)}`:"";
   const remainLine = getRemainText(b);
-  const txt=`🌊 SERENE TRAVEL — XÁC NHẬN ĐẶT DỊCH VỤ\n\nMã booking: ${b.id}\nNgày: ${b.created}\n\n👤 Đại diện: ${b.name}\n📞 SĐT: ${b.phone}${gl}\n\n📦 DỊCH VỤ BAO GỒM:\n${svl}\n\n💰 TỔNG TIỀN: ${VND(b.totalAmt)}${payLine}${remainLine}\n\n🏦 CHUYỂN KHOẢN:\n  MB Bank · ${STK}\n  Người nhận: NGUYEN DUY HA\n  Nội dung: Quý khách vui lòng để nội dung mặc định\n\n🏣 SERENE TRAVEL\n📍 Đường Lư Giang, Phước Trung, Nam Nha Trang, Khánh Hòa\n📞 0327 818 196`;
-  navigator.clipboard.writeText(txt).then(()=>toast("Đã copy! Paste vào Zalo.")).catch(()=>toast("Copy thất bại"));
+  const txt=`🌊 SERENE TRAVEL - XÁC NHẬN ĐẶT DỊCH VỤ\n\nMã booking: ${b.id}\nNgày: ${b.created}\n\nĐại diện: ${b.name}\nSĐT: ${b.phone}${gl}\n\n${blocks}\n\nTỔNG CỘNG: ${VND(b.totalAmt)}${payLine}${remainLine}\n\nTHÔNG TIN CHUYỂN KHOẢN:\n  MB Bank · ${STK}\n  Người nhận: NGUYEN DUY HA\n  Nội dung: Quý khách vui lòng để nội dung mặc định\n\n🏣 SERENE TRAVEL\n📍 Đường Lư Giang, Phước Trung, Nam Nha Trang, Khánh Hòa\n📞 0327 818 196`;
+  copyToClipboard(txt,"Đã copy! Paste vào Zalo.");
+}
+
+// Phiếu điều hành: mỗi dịch vụ 1 tin nhắn riêng gửi cho đúng đối tác
+function copyDH(id, si){
+  const b=bookings.find(x=>x.id===id); if(!b) return;
+  const s=b.svcs[si]; if(!s) return;
+  if(!s.totalNet){ toast("Chưa nhập giá net cho dịch vụ này"); return; }
+  const st=stayInfo(s);
+  let t=`ĐH: ${b.id}\n${s.name}\nSố lượng: ${qtyText(s)}`;
+  if(st) t+=`\nCheck in: ${st.dIn}\nCheck out: ${st.dOut}${st.nights?` (${st.nights} đêm)`:""}`;
+  t+=`\nDanh sách:\n${guestBullets(b).join("\n")}\n\nNet: ${VNDn(s.totalNet)}đ`;
+  copyToClipboard(t,"Đã copy phiếu điều hành!");
+}
+
+// Qua ngày check out cuối cùng thì đơn tự chuyển "Đã hoàn thành"
+function autoComplete(){
+  const today=new Date(); today.setHours(0,0,0,0);
+  let changed=false;
+  bookings.forEach(b=>{
+    if(b.status==="completed") return;
+    let last=null;
+    (b.svcs||[]).forEach(s=>{
+      const t=parseDate6(s.dateOut||s.dateIn||"");
+      if(t&&(!last||t>last)) last=t;
+    });
+    if(last&&last<today){ b.status="completed"; changed=true; }
+  });
+  return changed;
 }
 
 function delBooking(id){
