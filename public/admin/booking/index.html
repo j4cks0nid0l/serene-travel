@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>Booking | Quản trị Serene Travel</title>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/tabler-icons.min.css" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#F0F4F8;min-height:100vh;font-family:"Be Vietnam Pro",sans-serif;color:#2C3E50;font-size:14px}
+.app{max-width:680px;margin:0 auto;padding:1rem}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:.875rem 1.25rem;background:#fff;border:.5px solid rgba(58,125,153,.15);border-radius:14px;margin-bottom:.75rem}
+.brand{display:flex;align-items:center;gap:10px}
+.logo{width:42px;height:42px;border-radius:10px;object-fit:cover}
+.brand-name{font-family:Georgia,serif;font-size:17px;font-weight:600;color:#2A5F78;letter-spacing:1px}
+.brand-sub{font-size:10px;color:#7A8FA0;letter-spacing:1.5px;text-transform:uppercase}
+.bk-num{font-family:Georgia,serif;font-size:22px;font-weight:700;color:#3A7D99;text-align:right}
+.bk-lbl{font-size:10px;color:#7A8FA0;text-align:right}
+.tabs{display:grid;grid-template-columns:1fr 1fr 1fr;background:#fff;border:.5px solid rgba(58,125,153,.15);border-radius:12px;overflow:hidden;margin-bottom:.75rem}
+.tab{padding:10px 6px;font-size:12.5px;font-family:inherit;font-weight:500;color:#7A8FA0;background:none;border:none;border-right:.5px solid rgba(58,125,153,.15);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px}
+.tab:last-child{border-right:none}
+.tab.active{background:#3A7D99;color:#fff}
+.panel{display:none}.panel.active{display:block}
+.card{background:#fff;border:.5px solid rgba(58,125,153,.15);border-radius:12px;padding:1.125rem 1.25rem;margin-bottom:.75rem}
+.sec-title{font-size:10.5px;font-weight:600;color:#3A7D99;letter-spacing:1.2px;text-transform:uppercase;margin-bottom:12px;display:flex;align-items:center;gap:6px}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.field-row.one{grid-template-columns:1fr}
+label{font-size:11px;font-weight:500;color:#7A8FA0;display:block;margin-bottom:4px}
+input,select,textarea{width:100%;padding:8px 11px;font-size:13px;font-family:inherit;border:.5px solid rgba(58,125,153,.25);border-radius:8px;background:#fff;color:#2C3E50}
+input:focus,select:focus,textarea:focus{outline:2px solid rgba(58,125,153,.35);outline-offset:1px}
+textarea{resize:vertical;min-height:68px;line-height:1.6}
+.svc-wrap{background:#EBF5F9;border:.5px solid rgba(58,125,153,.2);border-radius:10px;padding:12px;margin-bottom:8px}
+.svc-label{font-size:10px;font-weight:600;color:#3A7D99;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px}
+.svc-date-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.svc-date-box{background:#fff;border:.5px solid rgba(58,125,153,.2);border-radius:8px;padding:7px 10px}
+.svc-date-lbl{font-size:10px;color:#7A8FA0;margin-bottom:3px}
+.svc-date-val{font-size:13px;font-weight:600;color:#2A5F78;letter-spacing:.5px}
+.svc-date-input{width:100%;border:none;outline:none;font-size:13px;font-weight:600;color:#2A5F78;background:transparent;letter-spacing:.5px;font-family:inherit}
+.svc-date-input::placeholder{color:#A8BFCC;font-weight:400}
+.svc-nights-badge{font-size:10px;color:#5BA4A4;margin-top:2px}
+.svc-grid{display:grid;grid-template-columns:2fr 1fr 1fr 30px;gap:8px;align-items:end}
+.svc-qty-row{display:flex;gap:6px;align-items:center}
+.svc-qty-row input{flex:1;min-width:0}
+.svc-qty-row select{width:80px;padding:8px 4px;font-size:11px;font-family:inherit;border:.5px solid rgba(58,125,153,.25);border-radius:8px;background:#fff;color:#2C3E50}
+.svc-sub{font-size:12px;font-weight:600;color:#2A5F78;text-align:right;margin-top:7px;padding-top:7px;border-top:.5px solid rgba(58,125,153,.2)}
+.btn-del{width:30px;height:34px;background:none;border:.5px solid rgba(184,92,92,.3);border-radius:7px;color:#B85C5C;cursor:pointer;font-size:13px}
+.btn-add{display:flex;align-items:center;justify-content:center;gap:6px;font-size:12.5px;font-family:inherit;font-weight:500;color:#5BA4A4;background:none;border:.5px dashed #5BA4A4;border-radius:9px;padding:8px;cursor:pointer;width:100%;margin-top:4px}
+.total-row{display:flex;justify-content:space-between;align-items:center;padding:12px 0 4px;border-top:.5px solid rgba(58,125,153,.15);margin-top:8px}
+.total-lbl{font-size:12px;color:#7A8FA0}
+.total-val{font-family:Georgia,serif;font-size:22px;font-weight:700;color:#2A5F78}
+.btn-main{width:100%;padding:13px;background:#3A7D99;color:#fff;border:none;border-radius:11px;font-size:14px;font-weight:600;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+.btn-main:hover{background:#2A5F78}
+.bk-item{background:#fff;border:.5px solid rgba(58,125,153,.15);border-radius:11px;padding:1rem 1.125rem;cursor:pointer;margin-bottom:.6rem;transition:border-color .15s}
+.bk-item:hover{border-color:#3A7D99}
+.bk-item.sel{border:1.5px solid #3A7D99}
+.bk-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px}
+.bk-id{font-size:11px;font-weight:600;color:#5BA4A4;letter-spacing:1.2px}
+.bk-name{font-size:14.5px;font-weight:500;margin-top:1px}
+.bk-phone{font-size:12px;color:#7A8FA0}
+.badge{font-size:10.5px;padding:3px 10px;border-radius:20px;font-weight:600;white-space:nowrap}
+.b-wait{background:#FBF3E4;color:#C8963C}
+.b-partial{background:#EBF5F9;color:#2A5F78}
+.b-done{background:#EDF7F2;color:#4A9B6F}
+.prog{height:3px;background:#E8DFD0;border-radius:2px;overflow:hidden;margin-top:6px}
+.prog-fill{height:100%;background:#3A7D99;border-radius:2px;transition:width .4s}
+.bk-bot{display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding-top:8px;border-top:.5px solid rgba(58,125,153,.1)}
+.bk-amt{font-family:Georgia,serif;font-size:17px;font-weight:700}
+.bk-remain{font-size:11.5px;color:#7A8FA0}
+/* PHIEU */
+.phieu{background:linear-gradient(135deg,#F5F0E8 0%,#fff 100%);border:.5px solid #E8DFD0;border-radius:12px;padding:1.25rem;margin-bottom:.75rem}
+.phieu-header{display:flex;align-items:center;gap:12px;padding-bottom:12px;border-bottom:.5px solid #E8DFD0;margin-bottom:12px}
+.phieu-logo{width:44px;height:44px;border-radius:9px;object-fit:cover}
+.phieu-brand{font-family:Georgia,serif;font-size:17px;font-weight:600;color:#2A5F78;letter-spacing:1px}
+.phieu-sub{font-size:9.5px;color:#7A8FA0;letter-spacing:1px;text-transform:uppercase}
+.phieu-id{font-family:Georgia,serif;font-size:22px;font-weight:700;color:#3A7D99;letter-spacing:3px}
+.phieu-date{font-size:11px;color:#7A8FA0}
+.sec-tiny{font-size:10px;font-weight:600;color:#7A8FA0;letter-spacing:1px;text-transform:uppercase;margin-bottom:7px}
+.phieu-row{display:flex;justify-content:space-between;padding:4px 0;font-size:12.5px;border-bottom:.5px solid rgba(0,0,0,.05)}
+.phieu-lbl{color:#7A8FA0}
+.phieu-val{font-weight:500;color:#2C3E50;text-align:right}
+.svc-tbl{width:100%;border-collapse:collapse;font-size:12px}
+.svc-tbl th{font-size:10px;color:#7A8FA0;padding:4px 3px;border-bottom:.5px solid #E8DFD0;font-weight:500}
+.svc-tbl th:first-child{text-align:left}
+.svc-tbl th:nth-child(2),.svc-tbl th:nth-child(3){text-align:center}
+.svc-tbl th:nth-child(4),.svc-tbl th:last-child{text-align:right}
+.svc-tbl td{padding:5px 3px;border-bottom:.5px solid rgba(0,0,0,.04)}
+.svc-tbl td:nth-child(2),.svc-tbl td:nth-child(3){text-align:center}
+.svc-tbl td:nth-child(4),.svc-tbl td:last-child{text-align:right;font-weight:600}
+.phieu-total{display:flex;justify-content:space-between;padding:10px 0 4px;border-top:1px solid #E8DFD0;margin-top:6px}
+.phieu-total-lbl{font-size:13px;font-weight:600}
+.phieu-total-val{font-family:Georgia,serif;font-size:20px;font-weight:700;color:#2A5F78}
+.bank-box{background:#fff;border:.5px solid rgba(58,125,153,.3);border-radius:9px;padding:12px;margin-top:10px}
+.bank-title{font-size:10px;font-weight:600;color:#3A7D99;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px}
+.bank-flex{display:flex;gap:16px;align-items:flex-start}
+.bank-info{flex:1}
+.bank-row{display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:.5px solid rgba(0,0,0,.05)}
+.bank-key{color:#7A8FA0}
+.bank-val{font-weight:500;color:#2C3E50}
+.bank-val.strong{font-weight:700;color:#2A5F78;font-size:13px}
+.qr-wrap{text-align:center}
+.qr-wrap img{width:110px;height:110px;border-radius:8px;border:.5px solid #E8DFD0}
+.qr-lbl{font-size:10px;color:#7A8FA0;margin-top:4px}
+.phieu-footer{margin-top:12px;padding-top:12px;border-top:.5px solid #E8DFD0;font-size:11px;color:#7A8FA0;line-height:1.7}
+.phieu-footer-name{font-family:Georgia,serif;font-weight:600;color:#2A5F78;font-size:12px;letter-spacing:1px}
+.guests-list{font-size:12px;color:#2C3E50;line-height:1.8;white-space:pre-line}
+/* PAYMENT */
+.pay-form{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:10px}
+.btn-pay{padding:8px 14px;background:#3A7D99;color:#fff;border:none;border-radius:8px;font-size:13px;font-family:inherit;font-weight:500;cursor:pointer;height:34px;margin-top:18px;display:flex;align-items:center;gap:5px}
+.pay-hist-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:.5px solid rgba(58,125,153,.1);font-size:12.5px}
+.pay-tag{font-size:10px;padding:2px 8px;border-radius:10px;background:#EBF5F9;color:#2A5F78;font-weight:600;margin-left:5px}
+.pay-cards{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.pay-card{background:#F5F0E8;border-radius:9px;padding:10px 12px}
+.pay-card-lbl{font-size:10px;color:#7A8FA0;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px}
+.pay-card-val{font-family:Georgia,serif;font-size:17px;font-weight:700}
+.act-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:.75rem}
+.btn-outline{padding:10px;background:none;border:.5px solid rgba(58,125,153,.2);border-radius:9px;font-size:12.5px;font-family:inherit;color:#2C3E50;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px}
+.btn-danger{border-color:rgba(184,92,92,.3);color:#B85C5C}
+/* STATS */
+.stat-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:.75rem}
+.stat-card{background:#fff;border:.5px solid rgba(58,125,153,.15);border-radius:11px;padding:14px 12px;text-align:center}
+.stat-val{font-family:Georgia,serif;font-weight:700}
+.stat-lbl{font-size:10px;color:#7A8FA0;letter-spacing:.5px;text-transform:uppercase;margin-top:3px}
+.empty{text-align:center;padding:3rem 1rem;color:#7A8FA0}
+.empty i{font-size:38px;display:block;margin-bottom:10px;opacity:.25}
+.no-pay{font-size:12.5px;color:#7A8FA0;padding:8px 0}
+.pay-opt{cursor:pointer}
+.pay-opt-box{border:.5px solid rgba(58,125,153,.2);border-radius:10px;padding:10px 8px;text-align:center;transition:all .15s;background:#fff}
+.pay-opt-box:hover{border-color:#3A7D99;background:#EBF5F9}
+.pay-opt-box.selected{border:1.5px solid #3A7D99;background:#EBF5F9}
+.pay-opt-icon{font-size:20px;margin-bottom:4px}
+.pay-opt-name{font-size:12px;font-weight:600;color:#2A5F78;margin-bottom:2px}
+.pay-opt-desc{font-size:10px;color:#7A8FA0;line-height:1.4}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#2A5F78;color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;font-weight:500;opacity:0;transition:opacity .25s;pointer-events:none;z-index:9999;white-space:nowrap}
+.toast.show{opacity:1}
+.stat-item{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:.5px solid rgba(58,125,153,.1)}
+/* STATUS BADGES */
+.b-pending{background:#FBF3E4;color:#C8963C}
+.b-partial{background:#EBF5F9;color:#2A5F78}
+.b-done{background:#EDF7F2;color:#4A9B6F}
+.b-completed{background:#E8F5E9;color:#2E7D32}
+/* NET PRICE */
+.net-row{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px}
+.net-input-wrap{display:flex;flex-direction:column;gap:2px}
+.net-lbl{font-size:10px;color:#7A8FA0;font-weight:500}
+.profit-bar{background:#EDF7F2;border-radius:8px;padding:8px 10px;margin-top:8px;font-size:12px;color:#2E7D32;font-weight:600;display:none}
+/* PAYMENT CONFIRM */
+.pay-confirm-section{margin-top:10px}
+.pay-confirm-btn{width:100%;padding:11px;border:none;border-radius:10px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:8px}
+.btn-confirm-coc{background:#3A7D99;color:#fff}
+.btn-confirm-full{background:#4A9B6F;color:#fff}
+.btn-confirm-complete{background:#2E7D32;color:#fff}
+/* CALENDAR BTN */
+.btn-calendar{padding:10px;background:none;border:.5px solid rgba(58,125,153,.2);border-radius:9px;font-size:12.5px;font-family:inherit;color:#3A7D99;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px}
+.btn-calendar:hover{background:#EBF5F9}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+<div class="topbar">
+  <div class="brand">
+    <img class="logo" src="/assets/8436733ede1296a71ad7.jpg" alt="Logo">
+    <div>
+      <div class="brand-name">Serene Travel</div>
+      <div class="brand-sub">Booking Manager</div>
+    </div>
+  </div>
+  <div>
+    <a href="/admin/" style="display:block;font-size:11px;color:#3A7D99;text-decoration:none;text-align:right;margin-bottom:2px">← Về trang quản trị</a>
+    <div class="bk-num" id="bk-count">0</div>
+    <div class="bk-lbl">đơn đang quản lý</div>
+  </div>
+</div>
+<div id="sync-status" style="display:none;text-align:center;font-size:12px;color:#7A8FA0;padding:6px;background:#EBF5F9;border-radius:8px;margin-bottom:.5rem"></div>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('new')"><i class="ti ti-plus"></i>Tạo đơn</button>
+  <button class="tab" onclick="switchTab('list')"><i class="ti ti-list"></i>Danh sách</button>
+  <button class="tab" onclick="switchTab('stats')"><i class="ti ti-chart-bar"></i>Thống kê</button>
+</div>
+
+<button onclick="syncFromSheet();renderList();" style="width:100%;padding:7px;background:none;border:.5px solid rgba(58,125,153,.2);border-radius:9px;font-size:12px;color:#3A7D99;cursor:pointer;margin-bottom:.75rem;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px">
+  <i class="ti ti-refresh"></i>Làm mới dữ liệu
+</button>
+<div class="panel active" id="panel-new">
+  <div class="card">
+    <div class="sec-title"><i class="ti ti-user-circle"></i>Thông tin khách hàng</div>
+    <div class="field-row">
+      <div><label>Tên đại diện</label><input id="kh-name" placeholder="Nguyễn Văn A"></div>
+      <div><label>Số điện thoại</label><input id="kh-phone" placeholder="0901 234 567"></div>
+    </div>
+    <div class="field-row one">
+      <div><label>Danh sách khách (mỗi người 1 dòng)</label>
+        <textarea id="kh-guests" placeholder="Nguyễn Văn A&#10;Trần Thị B"></textarea>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="sec-title"><i class="ti ti-building"></i>Dịch vụ đặt</div>
+    <div id="svc-container"></div>
+    <button class="btn-add" onclick="addSvc()"><i class="ti ti-plus"></i>Thêm dịch vụ</button>
+    <div class="total-row">
+      <span class="total-lbl">Tổng thành tiền</span>
+      <span class="total-val" id="grand-total">0 đ</span>
+    </div>
+  </div>
+  <button class="btn-main" onclick="createBooking()"><i class="ti ti-file-check"></i>Tạo đơn hàng</button>
+</div>
+
+<div class="panel" id="panel-list">
+  <div id="list-wrap"></div>
+  <div id="detail-wrap"></div>
+</div>
+
+<div class="panel" id="panel-stats">
+  <div class="stat-grid" id="stat-grid"></div>
+  <div class="card" id="stat-list"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+</div>
+
+<script>
+const LOGO = "/assets/8436733ede1296a71ad7.jpg";
+const STK = "0327818196";
+const BANK_BIN = "970422";
+// ── Lưu dữ liệu qua máy chủ (chỉ chạy khi đã đăng nhập /admin) ──
+let CSRF = "";
+let loaded = false;
+let bookings = [];
+let isSyncing = false;
+
+function showSyncStatus(msg, isErr) {
+  const el = $("sync-status"); if (!el) return;
+  el.textContent = msg;
+  el.style.display = msg ? "block" : "none";
+  el.style.background = isErr ? "#FFE0E0" : "#EBF5F9";
+  el.style.color = isErr ? "#B85C5C" : "#3A7D99";
+}
+
+async function apiBooking(method, body) {
+  if (!CSRF) {
+    const sres = await fetch("/api/session", {cache:"no-store"});
+    if (sres.status === 401) { location.href = "/admin/"; throw new Error("Chưa đăng nhập"); }
+    CSRF = (await sres.json()).csrf || "";
+  }
+  const res = await fetch("/api/booking", {
+    method,
+    cache: "no-store",
+    headers: method === "GET" ? {} : {"content-type":"application/json","x-csrf-token":CSRF},
+    body: body ? JSON.stringify(body) : undefined
+  });
+  if (res.status === 401) { location.href = "/admin/"; throw new Error("Chưa đăng nhập"); }
+  const json = await res.json().catch(()=>({}));
+  if (!res.ok) throw new Error(json.error || "Lỗi máy chủ");
+  return json;
+}
+
+async function syncFromSheet() {
+  try {
+    showSyncStatus("⏳ Đang tải dữ liệu...");
+    const data = await apiBooking("GET");
+    bookings = Array.isArray(data.bookings) ? data.bookings : [];
+    loaded = true;
+    $("bk-count").textContent = bookings.length;
+    showSyncStatus("");
+    if (selId) showDetail(selId);
+  } catch(e) {
+    showSyncStatus("⚠️ Không tải được dữ liệu: " + e.message, true);
+    console.error(e);
+  }
+}
+let svcCount = 0;
+let selId = null;
+let toastTimer = null;
+
+function $(id){ return document.getElementById(id); }
+function VND(n){ return Number(n).toLocaleString("vi-VN")+" đ"; }
+function VNDn(n){ return Number(n).toLocaleString("vi-VN"); }
+function fmtInput(v){ const r=String(v).replace(/\D/g,""); return r?Number(r).toLocaleString("vi-VN"):""; }
+function parseNum(v){ return parseInt(String(v).replace(/\D/g,""))||0; }
+function genId(){
+  const now=new Date();
+  const yy=String(now.getFullYear()).slice(2);
+  const mm=String(now.getMonth()+1).padStart(2,"0");
+  const dd=String(now.getDate()).padStart(2,"0");
+  const prefix="ST"+yy+mm+dd;
+  const todayNums=bookings.filter(b=>b.id&&b.id.startsWith(prefix)).map(b=>parseInt(b.id.slice(8))||0);
+  const xx=(todayNums.length?Math.max(...todayNums):0)+1;
+  return prefix+String(xx).padStart(2,"0");
+}
+function getQr(amt,info){ return `https://img.vietqr.io/image/${BANK_BIN}-${STK}-compact2.png?accountName=NGUYEN+DUY+HA${amt>0?`&amount=${amt}`:""}${info?`&addInfo=${encodeURIComponent(info)}`:""}` }
+async function save() {
+  $("bk-count").textContent = bookings.length;
+  if (!loaded) {
+    showSyncStatus("⚠️ Chưa tải được dữ liệu nên chưa lưu. Bấm đồng bộ lại rồi thử lại.", true);
+    return;
+  }
+  try {
+    await apiBooking("PUT", {bookings});
+    showSyncStatus("");
+  } catch(e) {
+    showSyncStatus("⚠️ Lưu chưa được: " + e.message, true);
+    console.error("Save error:", e);
+  }
+}
+
+function toast(msg){
+  const t=$("toast"); t.textContent=msg; t.classList.add("show");
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove("show"),2500);
+}
+
+function switchTab(tab){
+  document.querySelectorAll(".tab").forEach((t,i)=>t.classList.toggle("active",["new","list","stats"][i]===tab));
+  document.querySelectorAll(".panel").forEach((p,i)=>p.classList.toggle("active",["panel-new","panel-list","panel-stats"][i]==="panel-"+tab));
+  if(tab==="list") renderList();
+  if(tab==="stats") renderStats();
+}
+
+function parseDate6(raw) {
+  // "050626" -> {d:5,m:6,y:2026} or null
+  const s = raw.replace(/\D/g,"");
+  if (s.length !== 6) return null;
+  const d=parseInt(s.slice(0,2)), m=parseInt(s.slice(2,4)), y=2000+parseInt(s.slice(4,6));
+  if (d<1||d>31||m<1||m>12) return null;
+  return new Date(y,m-1,d);
+}
+function fmtDate6(raw) {
+  const s = raw.replace(/\D/g,"");
+  if (s.length<2) return s;
+  if (s.length<4) return s.slice(0,2)+"/"+s.slice(2);
+  if (s.length<6) return s.slice(0,2)+"/"+s.slice(2,4)+"/"+s.slice(4);
+  return s.slice(0,2)+"/"+s.slice(2,4)+"/"+s.slice(4,6);
+}
+function diffDays(d1,d2) {
+  return Math.round((d2-d1)/(1000*60*60*24));
+}
+function onDateInput(i, field) {
+  const el = $(field+"-"+i);
+  const raw = el.value.replace(/\D/g,"");
+  if (raw.length > 6) { el.value = el.value.slice(0,-1); return; }
+  el.value = fmtDate6(raw);
+  autoFillNights(i);
+  calcTotal();
+}
+function autoFillNights(i) {
+  const d1raw = $("sd-"+i) ? $("sd-"+i).value.replace(/\D/g,"") : "";
+  const d2raw = $("se-"+i) ? $("se-"+i).value.replace(/\D/g,"") : "";
+  if (d1raw.length===6 && d2raw.length===6) {
+    const dt1=parseDate6(d1raw), dt2=parseDate6(d2raw);
+    if (dt1&&dt2) {
+      const diff=diffDays(dt1,dt2);
+      if (diff>0) {
+        // has nights -> fill col2 with nights
+        const c2el=$("sc2-"+i);
+        if(c2el) { c2el.value=diff; }
+        const u2el=$("su2-"+i);
+        if(u2el) u2el.value="đêm";
+        updateNightsBadge(i,diff);
+      } else {
+        updateNightsBadge(i,0);
+      }
+    }
+  }
+}
+function updateNightsBadge(i,nights) {
+  const badge=$("snb-"+i);
+  if(!badge) return;
+  if(nights>0) { badge.textContent=nights+" đêm"; badge.style.display="block"; }
+  else { badge.textContent=""; badge.style.display="none"; }
+}
+function calcTotal(){
+  let total=0;
+  document.querySelectorAll("[data-svc]").forEach(el=>{
+    const i=el.dataset.svc;
+    const p=parseNum($("sp-"+i).value);
+    const q1=parseInt($("sc1-"+i).value)||1;
+    const c2el=$("sc2-"+i);
+    const q2=c2el&&c2el.value.trim()!==""?parseInt(c2el.value)||1:1;
+    const hasC2=c2el&&c2el.value.trim()!=="";
+    const sub=hasC2?p*q1*q2:p*q1;
+    total+=sub;
+    $("ss-"+i).textContent="Thành tiền: "+VNDn(sub)+" đ";
+  });
+  $("grand-total").textContent=VNDn(total)+" đ";
+}
+
+function calcProfit(i) {
+  const price = parseNum($("sp-"+i)?$("sp-"+i).value:"");
+  const totalNetInput = parseNum($("snet-"+i)?$("snet-"+i).value:"");
+  const q1 = parseInt($("sc1-"+i)?$("sc1-"+i).value:1)||1;
+  const c2el = $("sc2-"+i);
+  const hasC2 = c2el&&c2el.value.trim()!=="";
+  const q2 = hasC2?(parseInt(c2el.value)||1):1;
+  const totalSell = hasC2?price*q1*q2:price*q1;
+  const profEl = $("spro-"+i);
+  if(!profEl) return;
+  if(totalNetInput>0 && price>0) {
+    const profit = totalSell - totalNetInput;
+    profEl.style.display="block";
+    profEl.textContent = (profit>=0?"+ ":"- ")+VNDn(Math.abs(profit))+" đ";
+    profEl.style.background = profit>=0?"#EDF7F2":"#FFE0E0";
+    profEl.style.color = profit>=0?"#2E7D32":"#B85C5C";
+  } else { profEl.style.display="none"; }
+}
+
+function addSvc(s){
+  svcCount++;
+  const i=svcCount;
+  const div=document.createElement("div");
+  div.className="svc-wrap"; div.setAttribute("data-svc",i);
+  const u1opts=["vé","phòng","chiếc","căn","người"].map(u=>`<option value="${u}"${s&&s.unit1===u?" selected":""}>${u}</option>`).join("");
+  const u2opts=["đêm","lần","chuyến","ngày","chiều"].map(u=>`<option value="${u}"${s&&s.unit2===u?" selected":""}>${u}</option>`).join("");
+  div.innerHTML=`
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <div class="svc-label" style="margin-bottom:0">Dịch vụ ${i}</div>
+    <button class="btn-del" onclick="this.closest('[data-svc]').remove();calcTotal()" style="width:26px;height:26px">✕</button>
+  </div>
+  <div class="svc-date-row">
+    <div class="svc-date-box">
+      <div class="svc-date-lbl">📅 Ngày đi</div>
+      <input class="svc-date-input" id="sd-${i}" placeholder="DDMMYY" maxlength="8"
+        value="${s&&s.dateIn?s.dateIn:""}"
+        oninput="onDateInput(${i},'sd')">
+      <div class="svc-nights-badge" id="snb-${i}" style="display:none"></div>
+    </div>
+    <div class="svc-date-box">
+      <div class="svc-date-lbl">📅 Ngày về</div>
+      <input class="svc-date-input" id="se-${i}" placeholder="DDMMYY" maxlength="8"
+        value="${s&&s.dateOut?s.dateOut:""}"
+        oninput="onDateInput(${i},'se')">
+    </div>
+  </div>
+  <div class="svc-grid">
+    <div><label>Tên dịch vụ</label><input id="sn-${i}" placeholder="VD: Phòng Deluxe Sea View" value="${s?s.name:""}"></div>
+    <div><label>Giá bán (đ)</label><input id="sp-${i}" inputmode="numeric" placeholder="0" value="${s?VNDn(s.price):""}" oninput="this.value=fmtInput(this.value);calcTotal()"></div>
+    <div>
+      <label>Cột 1</label>
+      <div class="svc-qty-row">
+        <input id="sc1-${i}" type="number" min="1" value="${s&&s.qty1?s.qty1:1}" oninput="calcTotal()" placeholder="1">
+        <select id="su1-${i}">${u1opts}</select>
+      </div>
+    </div>
+    <div style="padding-top:0">
+      <label>Cột 2 <span style="font-size:10px;color:#A8BFCC">(tuỳ chọn)</span></label>
+      <div class="svc-qty-row">
+        <input id="sc2-${i}" type="number" min="1" value="${s&&s.qty2!==undefined?s.qty2:""}" oninput="calcTotal()" placeholder="—">
+        <select id="su2-${i}">${u2opts}</select>
+      </div>
+    </div>
+  </div>
+  <div class="net-row">
+    <div class="net-input-wrap">
+      <span class="net-lbl">💵 Giá net (đ) — tuỳ chọn</span>
+      <input id="snet-${i}" inputmode="numeric" placeholder="Để trống nếu chưa có" value="${s&&s.totalNet?VNDn(s.totalNet):""}" oninput="this.value=fmtInput(this.value);calcProfit(${i})" style="padding:7px 10px;font-size:12px;border:.5px solid rgba(58,125,153,.2);border-radius:7px;background:#fff;color:#2C3E50;font-family:inherit">
+    </div>
+    <div class="net-input-wrap" style="justify-content:flex-end">
+      <span class="net-lbl">📊 Lợi nhuận dịch vụ</span>
+      <div class="profit-bar" id="spro-${i}"></div>
+    </div>
+  </div>
+  <div class="svc-sub" id="ss-${i}">Thành tiền: 0 đ</div>`;
+  $("svc-container").appendChild(div);
+  calcTotal();
+}
+
+// Payment preview removed - now handled in detail view
+
+function createBooking(){
+  const name=$("kh-name").value.trim(), phone=$("kh-phone").value.trim();
+  if(!name||!phone){ toast("Nhập tên và SĐT!"); return; }
+  const svcs=[];
+  document.querySelectorAll("[data-svc]").forEach(el=>{
+    const i=el.dataset.svc;
+    const nm=$("sn-"+i).value.trim(), p=parseNum($("sp-"+i).value);
+    const q1=parseInt($("sc1-"+i).value)||1;
+    const u1=$("su1-"+i)?$("su1-"+i).value:"người";
+    const c2el=$("sc2-"+i);
+    const hasC2=c2el&&c2el.value.trim()!=="";
+    const q2=hasC2?(parseInt(c2el.value)||1):null;
+    const u2=hasC2&&$("su2-"+i)?$("su2-"+i).value:"đêm";
+    const dateIn=$("sd-"+i)?$("sd-"+i).value:"";
+    const dateOut=$("se-"+i)?$("se-"+i).value:"";
+    const totalNetInput = parseNum($("snet-"+i)?$("snet-"+i).value:"");
+    const units = hasC2?q1*q2:q1;
+    const netPrice = totalNetInput>0?Math.round(totalNetInput/units):null;
+    const sub=hasC2?p*q1*q2:p*q1;
+    if(nm&&p>0) svcs.push({name:nm,price:p,netPrice,totalNet:totalNetInput||null,qty1:q1,unit1:u1,qty2:q2,unit2:u2,dateIn,dateOut,total:sub});
+  });
+  if(!svcs.length){ toast("Thêm ít nhất 1 dịch vụ có giá!"); return; }
+  const totalAmt=svcs.reduce((a,s)=>a+s.total,0);
+  const bk={id:genId(),name,phone,guests:$("kh-guests").value.trim(),svcs,totalAmt,created:new Date().toLocaleDateString("vi-VN"),payments:[],status:"pending"};
+  bookings.push(bk); save();
+  toast("Đã tạo "+bk.id);
+  $("kh-name").value=""; $("kh-phone").value=""; $("kh-guests").value="";
+  $("svc-container").innerHTML=""; svcCount=0; calcTotal();
+  switchTab("list"); selId=bk.id; renderList(); showDetail(bk.id);
+}
+
+function renderList(){
+  const w=$("list-wrap");
+  if(!bookings.length){ w.innerHTML='<div class="empty"><i class="ti ti-inbox"></i>Chưa có đơn nào</div>'; $("detail-wrap").innerHTML=""; selId=null; return; }
+  w.innerHTML=[...bookings].reverse().map(b=>{
+    const paid=b.payments.reduce((a,p)=>a+p.amount,0), remain=b.totalAmt-paid;
+    const pct=b.totalAmt?Math.min(100,Math.round(paid/b.totalAmt*100)):0;
+    const badge=remain<=0?'<span class="badge b-done">Đã TT đủ</span>':paid>0?'<span class="badge b-partial">Đã cọc</span>':'<span class="badge b-wait">Chờ cọc</span>';
+    return `<div class="bk-item${selId===b.id?" sel":""}" onclick="toggleDetail('${b.id}')">
+      <div class="bk-top"><div><div class="bk-id">${b.id}</div><div class="bk-name">${b.name}</div><div class="bk-phone">${b.phone}</div></div>${badge}</div>
+      <div class="prog"><div class="prog-fill" style="width:${pct}%"></div></div>
+      <div class="bk-bot"><span class="bk-amt">${VNDn(b.totalAmt)} đ</span><span class="bk-remain">${remain>0?"Còn: "+VNDn(remain)+" đ":"Đã hết"}</span></div>
+    </div>`;
+  }).join("");
+}
+
+function toggleDetail(id){
+  if(selId===id){ selId=null; $("detail-wrap").innerHTML=""; renderList(); return; }
+  selId=id; renderList(); showDetail(id);
+}
+
+function showDetail(id){
+  const b=bookings.find(x=>x.id===id); if(!b) return;
+  const paid=b.payments.reduce((a,p)=>a+p.amount,0), remain=b.totalAmt-paid;
+  const qr=getQr(remain>0?remain:b.totalAmt, b.id);
+  const gl=b.guests?b.guests.split("\n").filter(g=>g.trim()).map(g=>"• "+g.trim()).join("\n"):"—";
+  const svcRows=b.svcs.map(s=>{
+    const datePart=s.dateIn&&s.dateOut&&s.dateIn!==s.dateOut?`${s.dateIn}→${s.dateOut}`:s.dateIn?s.dateIn:"—";
+    const qtyPart=s.qty2!==null&&s.qty2!==undefined?`${s.qty1} ${s.unit1||""} x ${s.qty2} ${s.unit2||""}`:`${s.qty1} ${s.unit1||""}`;
+    return `<tr><td>${datePart}</td><td>${s.name}</td><td>${qtyPart}</td><td>${VNDn(s.price)}</td><td>${VNDn(s.total)}</td></tr>`;
+  }).join("");
+  const payHist=b.payments.length?b.payments.map(p=>`<div class="pay-hist-row"><div>${p.date}<span class="pay-tag">${p.type}</span></div><div style="font-weight:600;color:#4A9B6F">${VND(p.amount)}</div></div>`).join(""):'<div class="no-pay">Chưa có thanh toán nào</div>';
+  const today=new Date().toISOString().split("T")[0];
+
+  $("detail-wrap").innerHTML=`
+  <div class="phieu">
+    <div class="phieu-header">
+      <img class="phieu-logo" src="${LOGO}" alt="Logo">
+      <div style="flex:1"><div class="phieu-brand">Serene Travel</div><div class="phieu-sub">Xác nhận dịch vụ du lịch</div></div>
+      <div style="text-align:right"><div class="phieu-id">${b.id}</div><div class="phieu-date">${b.created}</div></div>
+    </div>
+    <div style="margin-bottom:12px">
+      <div class="sec-tiny">Khách hàng</div>
+      <div class="phieu-row"><span class="phieu-lbl">Đại diện</span><span class="phieu-val">${b.name}</span></div>
+      <div class="phieu-row"><span class="phieu-lbl">Điện thoại</span><span class="phieu-val">${b.phone}</span></div>
+    </div>
+    ${b.guests?`<div style="margin-bottom:12px"><div class="sec-tiny">Danh sách khách</div><div class="guests-list">${gl}</div></div>`:""}
+    <div style="margin-bottom:12px">
+      <div class="sec-tiny">Chi tiết dịch vụ</div>
+      <table class="svc-tbl"><thead><tr><th>Ngày</th><th>Dịch vụ</th><th>Số lượng</th><th>Đơn giá</th><th>Thành tiền</th></tr></thead><tbody>${svcRows}</tbody></table>
+      <div class="phieu-total"><span class="phieu-total-lbl">Tổng cộng</span><span class="phieu-total-val">${VND(b.totalAmt)}</span></div>
+    </div>
+    <div class="bank-box">
+      <div class="bank-title">Thanh toán chuyển khoản</div>
+      <div class="bank-flex">
+        <div class="bank-info">
+          <div class="bank-row"><span class="bank-key">Ngân hàng</span><span class="bank-val">MB Bank</span></div>
+          <div class="bank-row"><span class="bank-key">Số tài khoản</span><span class="bank-val strong">${STK}</span></div>
+          <div class="bank-row"><span class="bank-key">Người nhận</span><span class="bank-val">NGUYEN DUY HA</span></div>
+          <div class="bank-row"><span class="bank-key">Nội dung CK</span><span class="bank-val" style="font-size:11px;color:#7A8FA0">Quý khách vui lòng để nội dung mặc định</span></div>
+        </div>
+        <div class="qr-wrap"><img src="${qr}" alt="QR" onerror="this.style.display='none'"><div class="qr-lbl">Quét để thanh toán</div></div>
+      </div>
+    </div>
+    <div class="phieu-footer">
+      <div class="phieu-footer-name">SERENE TRAVEL</div>
+      <div>Đường Lư Giang, Phước Trung, Nam Nha Trang, Khánh Hòa</div>
+      <div>0327 818 196 · serenetravelvn@gmail.com</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="sec-title"><i class="ti ti-credit-card"></i>Xác nhận thanh toán</div>
+    ${b.status!=="completed"?`
+    <div class="pay-confirm-section">
+      <button class="pay-confirm-btn btn-confirm-coc" onclick="confirmPayment('${id}','coc50')">💰 Xác nhận đã nhận cọc 50% — ${VND(Math.round(b.totalAmt*0.5))}</button>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end;margin-bottom:8px">
+        <div><label style="font-size:11px;color:#7A8FA0;display:block;margin-bottom:3px">Hoặc nhập số tiền cọc thực tế (đ)</label>
+        <input id="custom-coc-${id}" inputmode="numeric" placeholder="0" oninput="this.value=fmtInput(this.value)" style="padding:8px 10px;font-size:13px;font-family:inherit;border:.5px solid rgba(58,125,153,.25);border-radius:8px;background:#fff;color:#2C3E50;width:100%"></div>
+        <button class="btn-pay" style="margin-top:0" onclick="confirmPayment('${id}','custom')"><i class="ti ti-check"></i></button>
+      </div>
+      <button class="pay-confirm-btn btn-confirm-full" onclick="confirmPayment('${id}','full')">✅ Xác nhận đã nhận đủ 100% — ${VND(b.totalAmt)}</button>
+      ${remain>0&&paid>0?`<button class="pay-confirm-btn btn-confirm-full" onclick="confirmPayment('${id}','remaining')" style="background:#5BA4A4">💳 Xác nhận nhận nốt — ${VND(remain)}</button>`:""}
+    </div>`:""}
+    ${payHist.length?'<div style="margin-top:10px">'+payHist+'</div>':""}
+    <div class="pay-cards" style="margin-top:10px">
+      <div class="pay-card"><div class="pay-card-lbl">Đã nhận</div><div class="pay-card-val" style="color:#4A9B6F">${VND(paid)}</div></div>
+      <div class="pay-card"><div class="pay-card-lbl">Còn lại</div><div class="pay-card-val" style="color:${remain>0?"#C8963C":"#4A9B6F"}">${remain>0?VND(remain):"Đã đủ"}</div></div>
+    </div>
+    ${b.status!=="completed"&&remain<=0?`<button class="pay-confirm-btn btn-confirm-complete" style="margin-top:10px" onclick="markComplete('${id}')">✈️ Đánh dấu hoàn thành</button>`:""}
+  </div>
+
+  <div class="card">
+    <div class="sec-title"><i class="ti ti-edit"></i>Cập nhật giá net</div>
+    ${b.svcs.map((s,si)=>`
+    <div style="margin-bottom:10px;padding-bottom:10px;border-bottom:.5px solid rgba(58,125,153,.1)">
+      <div style="font-size:12px;font-weight:600;color:#2A5F78;margin-bottom:6px">${s.name}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div><label style="font-size:11px;color:#7A8FA0;display:block;margin-bottom:3px">Giá bán: ${VND(s.total)}</label>
+        <div style="font-size:12px;color:#7A8FA0">đơn giá ${VNDn(s.price)} đ</div></div>
+        <div><label style="font-size:11px;color:#7A8FA0;display:block;margin-bottom:3px">💵 Giá net (đ)</label>
+        <input id="edit-net-${id}-${si}" inputmode="numeric" placeholder="Chưa có" value="${s.netPrice?VNDn(s.netPrice*((s.qty2?s.qty1*s.qty2:s.qty1)||1)):""}"
+          oninput="this.value=fmtInput(this.value)"
+          style="padding:7px 10px;font-size:12px;font-family:inherit;border:.5px solid rgba(58,125,153,.2);border-radius:7px;background:#fff;color:#2C3E50;width:100%"></div>
+      </div>
+    </div>`).join("")}
+    <button class="btn-main" style="margin-top:4px" onclick="saveNetPrices('${id}')"><i class="ti ti-device-floppy"></i>Lưu giá net</button>
+    <div id="profit-summary-${id}" style="margin-top:10px"></div>
+  </div>
+
+  <div class="act-row" style="grid-template-columns:1fr 1fr 1fr">
+    <button class="btn-outline" onclick="copyText('${id}')"><i class="ti ti-copy"></i>Copy Zalo</button>
+    <button class="btn-calendar" onclick="addToCalendar('${id}')"><i class="ti ti-calendar-plus"></i>Calendar</button>
+    <button class="btn-outline btn-danger" onclick="delBooking('${id}')"><i class="ti ti-trash"></i>Xóa</button>
+  </div>`;
+  setTimeout(()=>$("detail-wrap").scrollIntoView({behavior:"smooth",block:"nearest"}),80);
+}
+
+function confirmPayment(id, type) {
+  const b=bookings.find(x=>x.id===id); if(!b) return;
+  const today=new Date().toLocaleDateString("vi-VN");
+  let amt=0, label="";
+  if(type==="coc50"){ amt=Math.round(b.totalAmt*0.5); label="Cọc 50%"; }
+  else if(type==="full"){ amt=b.totalAmt; label="Thanh toán full"; }
+  else if(type==="remaining"){
+    const paid=b.payments.reduce((a,p)=>a+p.amount,0);
+    amt=b.totalAmt-paid; label="Thanh toán nốt";
+  }
+  else if(type==="custom"){
+    amt=parseNum($("custom-coc-"+id)?$("custom-coc-"+id).value:"");
+    label="Tiền cọc";
+    if(!amt){ toast("Nhập số tiền!"); return; }
+  }
+  if(!amt){ toast("Số tiền không hợp lệ!"); return; }
+  b.payments.push({amount:amt,type:label,date:today});
+  const totalPaid=b.payments.reduce((a,p)=>a+p.amount,0);
+  b.status=totalPaid>=b.totalAmt?"done":totalPaid>0?"partial":"pending";
+  save(); toast("✅ Đã xác nhận nhận "+VND(amt));
+  renderList(); showDetail(id);
+}
+
+function markComplete(id) {
+  const b=bookings.find(x=>x.id===id); if(!b) return;
+  b.status="completed";
+  save(); toast("✈️ Đơn đã hoàn thành!");
+  renderList(); showDetail(id);
+}
+
+function saveNetPrices(id) {
+  const b=bookings.find(x=>x.id===id); if(!b) return;
+  b.svcs.forEach((s,si)=>{
+    const el=document.getElementById("edit-net-"+id+"-"+si);
+    if(!el) return;
+    const totalNet=parseNum(el.value)||0;
+    const units=(s.qty2?s.qty1*s.qty2:s.qty1)||1;
+    s.netPrice=totalNet>0?Math.round(totalNet/units):null;
+    s.totalNet=totalNet>0?totalNet:null;
+  });
+  save();
+  // Show profit summary
+  const totalSell=b.svcs.reduce((a,s)=>a+s.total,0);
+  const totalNet=b.svcs.filter(s=>s.totalNet).reduce((a,s)=>a+(s.totalNet||0),0);
+  const hasNet=b.svcs.some(s=>s.totalNet);
+  const el=document.getElementById("profit-summary-"+id);
+  if(el&&hasNet){
+    const profit=totalSell-totalNet;
+    el.innerHTML=`<div style="padding:10px 12px;background:${profit>=0?"#EDF7F2":"#FFE0E0"};border-radius:9px;font-size:13px;font-weight:600;color:${profit>=0?"#2E7D32":"#B85C5C"}">
+      📊 Lợi nhuận đơn: ${profit>=0?"+ ":"- "}${VND(Math.abs(profit))}
+    </div>`;
+  }
+  toast("💾 Đã lưu giá net!");
+}
+
+function addToCalendar(id) {
+  const b=bookings.find(x=>x.id===id); if(!b) return;
+  // Get earliest dateIn and latest dateOut
+  const datesIn=b.svcs.map(s=>s.dateIn).filter(d=>d&&d.replace(/\//g,"").length===6);
+  const datesOut=b.svcs.map(s=>s.dateOut).filter(d=>d&&d.replace(/\//g,"").length===6);
+  let earliest=null,latest=null;
+  datesIn.forEach(d=>{const dt=parseDate6(d.replace(/\//g,""));if(dt&&(!earliest||dt<earliest))earliest=dt;});
+  datesOut.forEach(d=>{const dt=parseDate6(d.replace(/\//g,""));if(dt&&(!latest||dt>latest))latest=dt;});
+  if(!earliest){ toast("Chưa có ngày đi!"); return; }
+  const pad=n=>String(n).padStart(2,"0");
+  const fmtCal=dt=>`${dt.getFullYear()}${pad(dt.getMonth()+1)}${pad(dt.getDate())}`;
+  const startDate=fmtCal(earliest);
+  // end date for calendar = day after checkout
+  const endDt=latest?new Date(latest.getTime()+86400000):new Date(earliest.getTime()+86400000);
+  const endDate=fmtCal(endDt);
+  const title=encodeURIComponent(`[${b.id}] ${b.name} - Serene Travel`);
+  const svcList=b.svcs.map(s=>s.name).join(", ");
+  const details=encodeURIComponent(`Mã booking: ${b.id}\nKhách: ${b.name} - ${b.phone}\nDịch vụ: ${svcList}\nTổng tiền: ${VND(b.totalAmt)}`);
+  const url=`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startDate}/${endDate}&details=${details}`;
+  window.open(url,"_blank");
+}
+
+function getRemainText(b) {
+  const paid=b.payments.reduce((a,p)=>a+p.amount,0), remain=b.totalAmt-paid;
+  if(remain<=0) return "";
+  const opt=b.payOpt||"";
+  if(opt==="coc50") return `\n⏳ Số còn lại ${VND(remain)} thanh toán nốt sau khi có mã số đặt phòng`;
+  if(opt==="cocpart") return `\n⏳ Số còn lại ${VND(remain)} thanh toán cho HDV khi đi tour`;
+  return "";
+}
+
+function copyText(id){
+  const b=bookings.find(x=>x.id===id); if(!b) return;
+  const paid=b.payments.reduce((a,p)=>a+p.amount,0);
+  const gl=b.guests?"\nDanh sách khách:\n"+b.guests.split("\n").filter(g=>g.trim()).map(g=>"  • "+g.trim()).join("\n"):"";
+  const svl=b.svcs.map(s=>{
+    const datePart = s.dateIn&&s.dateOut&&s.dateIn!==s.dateOut ? `[${s.dateIn} - ${s.dateOut}] ` : s.dateIn ? `[${s.dateIn}] ` : "";
+    const c2part = s.qty2!==null&&s.qty2!==undefined ? ` x ${s.qty2} ${s.unit2||""}` : "";
+    return `  • ${datePart}${s.name}: ${s.qty1} ${s.unit1||""}${c2part} x ${VNDn(s.price)} đ = ${VNDn(s.total)} đ`;
+  }).join("\n");
+  const payLine = paid>0?`\n💰 Cần đặt cọc: ${VND(paid)}`:"";
+  const remainLine = getRemainText(b);
+  const txt=`🌊 SERENE TRAVEL — XÁC NHẬN ĐẶT DỊCH VỤ\n\nMã booking: ${b.id}\nNgày: ${b.created}\n\n👤 Đại diện: ${b.name}\n📞 SĐT: ${b.phone}${gl}\n\n📦 DỊCH VỤ BAO GỒM:\n${svl}\n\n💰 TỔNG TIỀN: ${VND(b.totalAmt)}${payLine}${remainLine}\n\n🏦 CHUYỂN KHOẢN:\n  MB Bank · ${STK}\n  Người nhận: NGUYEN DUY HA\n  Nội dung: Quý khách vui lòng để nội dung mặc định\n\n🏣 SERENE TRAVEL\n📍 Đường Lư Giang, Phước Trung, Nam Nha Trang, Khánh Hòa\n📞 0327 818 196`;
+  navigator.clipboard.writeText(txt).then(()=>toast("Đã copy! Paste vào Zalo.")).catch(()=>toast("Copy thất bại"));
+}
+
+function delBooking(id){
+  if(!confirm("Xóa đơn "+id+"?")) return;
+  bookings=bookings.filter(b=>b.id!==id);
+  $("bk-count").textContent=bookings.length;
+  save();
+  selId=null; $("detail-wrap").innerHTML="";
+  renderList(); toast("Đã xóa "+id);
+}
+
+function renderStats(){
+  const rev=bookings.reduce((a,b)=>a+b.totalAmt,0);
+  const paid=bookings.reduce((a,b)=>a+b.payments.reduce((x,p)=>x+p.amount,0),0);
+  const totalNet=bookings.reduce((a,b)=>a+b.svcs.reduce((x,s)=>x+(s.totalNet||0),0),0);
+  const hasNet=bookings.some(b=>b.svcs.some(s=>s.totalNet));
+  const profit=rev-totalNet;
+  $("stat-grid").innerHTML=`
+    <div class="stat-card"><div class="stat-val" style="font-size:22px;color:#2A5F78">${bookings.length}</div><div class="stat-lbl">Tổng đơn</div></div>
+    <div class="stat-card"><div class="stat-val" style="font-size:13px;color:#2A5F78">${VNDn(rev)} đ</div><div class="stat-lbl">Doanh thu</div></div>
+    <div class="stat-card"><div class="stat-val" style="font-size:13px;color:#C8963C">${VNDn(rev-paid)} đ</div><div class="stat-lbl">Chưa thu</div></div>
+    <div class="stat-card"><div class="stat-val" style="font-size:13px;color:#4A9B6F">${VNDn(paid)} đ</div><div class="stat-lbl">Đã thu</div></div>
+    <div class="stat-card" style="grid-column:span 2"><div class="stat-val" style="font-size:13px;color:${profit>=0?"#2E7D32":"#B85C5C"}">${hasNet?(VNDn(profit)+" đ"):"Chưa đủ giá net"}</div><div class="stat-lbl">Lợi nhuận ước tính</div></div>`;
+  const sl=$("stat-list");
+  if(!bookings.length){ sl.innerHTML='<div class="empty"><i class="ti ti-chart-bar"></i>Chưa có dữ liệu</div>'; return; }
+  sl.innerHTML=[...bookings].reverse().map(b=>{
+    const p2=b.payments.reduce((a,p)=>a+p.amount,0), r2=b.totalAmt-p2;
+    const pct=b.totalAmt?Math.min(100,Math.round(p2/b.totalAmt*100)):0;
+    return `<div class="stat-item">
+      <div><div style="font-size:11px;font-weight:600;color:#5BA4A4;letter-spacing:1px">${b.id}</div>
+      <div style="font-size:14px;font-weight:500">${b.name}</div>
+      <div class="prog" style="width:100px;margin-top:5px"><div class="prog-fill" style="width:${pct}%"></div></div></div>
+      <div style="text-align:right"><div style="font-family:Georgia,serif;font-size:16px;font-weight:700">${VNDn(b.totalAmt)} đ</div>
+      <div style="font-size:11.5px;color:${r2>0?"#C8963C":"#4A9B6F"}">${r2>0?"Còn "+VNDn(r2)+" đ":"Đã đủ"}</div></div>
+    </div>`;
+  }).join("");
+}
+
+// Init
+addSvc();
+syncFromSheet();
+</script>
+</body>
+</html>
