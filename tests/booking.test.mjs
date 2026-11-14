@@ -50,6 +50,24 @@ test('Booking API (own database): login + CSRF, one row per order, no overwrite,
   assert.equal((await worker.fetch(new Request(origin+'/api/booking',{headers:{origin,cookie}}),bare)).status,503);
  }finally{env.close()}
 });
+test('Custom units: login required, saved once, validated',async()=>{
+ const env=await runtime({passwordHash:hash});
+ let cookie='',csrf='';
+ async function call(path,method='GET',body){const headers={origin,...(method==='GET'?{}:{'content-type':'application/json'}),...(cookie?{cookie}:{}),...(csrf?{'x-csrf-token':csrf}:{})};return worker.fetch(new Request(origin+'/api/'+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body)}),env)}
+ try{
+  assert.equal((await call('booking-units')).status,401);
+  const login=await call('login','POST',{email:'serenetravelvn@gmail.com',password:pass});
+  cookie=login.headers.get('set-cookie').split(';')[0];csrf=(await login.json()).csrf;
+  assert.deepEqual((await (await call('booking-units')).json()).units,[]);
+  assert.equal((await call('booking-units','POST',{name:'suất'})).status,200);
+  assert.equal((await call('booking-units','POST',{name:'  suất '})).status,200);
+  assert.equal((await call('booking-units','POST',{name:'bàn'})).status,200);
+  assert.deepEqual((await (await call('booking-units')).json()).units,['suất','bàn']);
+  for(const bad of ['',' ','a'.repeat(21),'<b>','x"y',undefined,5])assert.equal((await call('booking-units','POST',{name:bad})).status,400);
+  assert.equal((await call('booking-units','DELETE')).status,405);
+ }finally{env.close()}
+});
+
 test('Booking page gets the extra CSP; the rest of /admin and the site keep the strict one',async()=>{
  const env=await runtime({passwordHash:hash});env.ASSETS={fetch:async()=>new Response('ok',{headers:{'content-type':'text/html'}})};
  const csp=async p=>(await worker.fetch(new Request(origin+p),env)).headers.get('content-security-policy');

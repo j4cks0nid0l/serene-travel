@@ -48,6 +48,20 @@ if(path==='/api/booking-qr'&&req.method==='GET'){
  if(!r.ok||!(r.headers.get('content-type')||'').startsWith('image/'))return json({error:'Không lấy được mã QR.'},502);
  return new Response(r.body,{headers:{'content-type':r.headers.get('content-type'),'cache-control':'private, max-age=300','x-content-type-options':'nosniff'}})
 }
+if(path==='/api/booking-units'){
+ if(!env.BOOKINGS)return json({error:'Chưa kết nối kho đơn hàng.'},503);
+ try{
+  if(req.method==='GET'){const {results}=await env.BOOKINGS.prepare('SELECT name FROM booking_units ORDER BY rowid').all();return json({units:results.map(r=>r.name)})}
+  if(req.method==='POST'){
+   let input;try{input=await req.json()}catch{return json({error:'Nội dung không hợp lệ.'},400)}
+   const name=typeof input?.name==='string'?input.name.trim().replace(/\s+/g,' '):'';
+   if(!name||name.length>20||/[<>"&]/.test(name))return json({error:'Tên đơn vị phải từ 1 đến 20 ký tự, không chứa < > " &.'},400);
+   const c=await env.BOOKINGS.prepare('SELECT COUNT(*) AS n FROM booking_units').first();if((c?.n||0)>=100)return json({error:'Đã có quá nhiều đơn vị.'},400);
+   await env.BOOKINGS.prepare('INSERT OR IGNORE INTO booking_units(name,created) VALUES(?,?)').bind(name,new Date().toISOString()).run();return json({ok:true,name})
+  }
+ }catch{return json({error:'Chưa có bảng đơn vị. Cần chạy thêm lệnh tạo bảng trong D1.'},503)}
+ return json({error:'Không hỗ trợ.'},405)
+}
 if(path==='/api/booking'||path.startsWith('/api/booking/')){
  // Đơn hàng nằm trong database riêng (binding BOOKINGS), tách hẳn khỏi nội dung website.
  if(!env.BOOKINGS)return json({error:'Chưa kết nối kho đơn hàng.'},503);

@@ -97,3 +97,5 @@ Cài đặt trên Cloudflare:
 3. Deploy lại. Nếu thiếu binding, trang booking báo lỗi 503 thay vì lưu sai chỗ.
 
 Biến `JSONBIN_KEY` và `JSONBIN_BIN_ID` không còn được dùng và có thể xóa. Trang booking có nút tải bảng đơn hàng dạng CSV (tab Thống kê) để mở bằng Excel hoặc Google Sheets.
+
+Đơn vị tự thêm (ví dụ "suất", "bàn") lưu trong bảng `booking_units` của cùng database, nên dùng được ở mọi máy. Nếu database tạo từ trước, chạy thêm lệnh `CREATE TABLE IF NOT EXISTS booking_units (name TEXT PRIMARY KEY, created TEXT NOT NULL);` trong Console của D1.
