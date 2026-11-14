@@ -318,6 +318,7 @@ async function syncFromSheet() {
     renderList();
     if (selId) showDetail(selId);
     auto.forEach(b => saveBooking(b));
+    loadUnits();
   } catch(e) {
     showSyncStatus("⚠️ Không tải được dữ liệu: " + e.message, true);
     console.error(e);
@@ -483,14 +484,53 @@ function calcProfit(i) {
   } else { profEl.style.display="none"; }
 }
 
+const UNITS1=["vé","phòng","chiếc","căn","người"], UNITS2=["đêm","lần","chuyến","ngày","chiều"];
+let customUnits=[];
+// Danh sách đơn vị = đơn vị có sẵn + đơn vị tự thêm (lưu trong D1, dùng được ở mọi máy)
+function unitOpts(defaults, selected){
+  const list=[...defaults];
+  customUnits.forEach(u=>{ if(!list.includes(u)) list.push(u); });
+  if(selected && !list.includes(selected)) list.push(selected);
+  return list.map(u=>`<option value="${escAttr(u)}"${selected===u?" selected":""}>${escAttr(u)}</option>`).join("")+'<option value="__add__">+ Thêm đơn vị khác...</option>';
+}
+function refreshUnitSelects(){
+  document.querySelectorAll("select[data-def]").forEach(sel=>{
+    const cur=sel.value==="__add__"?(sel.dataset.prev||""):sel.value;
+    sel.innerHTML=unitOpts(sel.dataset.def==="1"?UNITS1:UNITS2, cur);
+    sel.value=cur; sel.dataset.prev=cur;
+  });
+}
+async function loadUnits(){
+  try{ const d=await apiBooking("GET", undefined, "/api/booking-units"); customUnits=Array.isArray(d.units)?d.units:[]; refreshUnitSelects(); }
+  catch(e){ console.warn("Chưa tải được đơn vị tự thêm:", e.message); }
+}
+async function unitChanged(sel){
+  if(sel.value!=="__add__"){ sel.dataset.prev=sel.value; return; }
+  const prev=sel.dataset.prev||"";
+  const raw=prompt("Nhập tên đơn vị mới (ví dụ: suất, bàn, gói):");
+  const name=(raw||"").trim().replace(/\s+/g," ");
+  if(!name){ sel.value=prev; return; }
+  if(name.length>20||/[<>"&]/.test(name)){ toast("Tên đơn vị tối đa 20 ký tự, không dùng < > \" &"); sel.value=prev; return; }
+  const all=[...UNITS1,...UNITS2,...customUnits];
+  const exist=all.find(u=>u.toLowerCase()===name.toLowerCase());
+  const finalName=exist||name;
+  if(!exist){
+    customUnits.push(finalName);
+    try{ await apiBooking("POST", {name:finalName}, "/api/booking-units"); toast("Đã thêm đơn vị: "+finalName); }
+    catch(e){ showSyncStatus("⚠️ Đơn vị dùng được cho đơn này nhưng chưa lưu lâu dài: "+e.message, true); }
+  }
+  sel.dataset.prev=finalName;
+  refreshUnitSelects();
+  sel.value=finalName; sel.dataset.prev=finalName;
+}
 function escAttr(v){ return String(v==null?"":v).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
 function addSvc(s){
   svcCount++;
   const i=svcCount;
   const div=document.createElement("div");
   div.className="svc-wrap"; div.setAttribute("data-svc",i);
-  const u1opts=["vé","phòng","chiếc","căn","người"].map(u=>`<option value="${u}"${s&&s.unit1===u?" selected":""}>${u}</option>`).join("");
-  const u2opts=["đêm","lần","chuyến","ngày","chiều"].map(u=>`<option value="${u}"${s&&s.unit2===u?" selected":""}>${u}</option>`).join("");
+  const u1opts=unitOpts(UNITS1,s&&s.unit1);
+  const u2opts=unitOpts(UNITS2,s&&s.unit2);
   div.innerHTML=`
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
     <div class="svc-label" style="margin-bottom:0">Dịch vụ ${i}</div>
@@ -518,14 +558,14 @@ function addSvc(s){
       <label>Cột 1</label>
       <div class="svc-qty-row">
         <input id="sc1-${i}" type="number" min="1" value="${s&&s.qty1?s.qty1:1}" oninput="calcTotal()" placeholder="1">
-        <select id="su1-${i}">${u1opts}</select>
+        <select id="su1-${i}" data-def="1" data-prev="${s&&s.unit1?escAttr(s.unit1):"vé"}" onchange="unitChanged(this)">${u1opts}</select>
       </div>
     </div>
     <div style="padding-top:0">
       <label>Cột 2 <span style="font-size:10px;color:#A8BFCC">(tuỳ chọn)</span></label>
       <div class="svc-qty-row">
         <input id="sc2-${i}" type="number" min="1" value="${s&&s.qty2!=null?s.qty2:""}" oninput="calcTotal()" placeholder="—">
-        <select id="su2-${i}">${u2opts}</select>
+        <select id="su2-${i}" data-def="2" data-prev="${s&&s.unit2?escAttr(s.unit2):"đêm"}" onchange="unitChanged(this)">${u2opts}</select>
       </div>
     </div>
   </div>
