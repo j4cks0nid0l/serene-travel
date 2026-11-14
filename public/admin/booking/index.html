@@ -7,6 +7,7 @@
 <title>Booking | Quản trị Serene Travel</title>
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&display=swap" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/tabler-icons.min.css" rel="stylesheet">
+<script src="/vendor/html2canvas.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#F0F4F8;min-height:100vh;font-family:"Be Vietnam Pro",sans-serif;color:#2C3E50;font-size:14px}
@@ -154,6 +155,48 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
 /* CALENDAR BTN */
 .btn-calendar{padding:10px;background:none;border:.5px solid rgba(58,125,153,.2);border-radius:9px;font-size:12.5px;font-family:inherit;color:#3A7D99;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px}
 .btn-calendar:hover{background:#EBF5F9}
+
+/* ── Phiếu xác nhận dạng ảnh: A5 ngang, 1240 x 874 px (tỉ lệ 210 x 148 mm) ── */
+#a5-host{position:fixed;left:-20000px;top:0;pointer-events:none}
+.a5{width:1240px;height:874px;box-sizing:border-box;padding:2.1em 2.4em 1.5em;background:#fff;color:#2C3E50;font-family:"Be Vietnam Pro",Arial,sans-serif;font-size:18px;line-height:1.35;display:flex;flex-direction:column;position:relative;overflow:hidden}
+.a5:before{content:"";position:absolute;top:14px;left:14px;right:14px;bottom:14px;border:2px solid rgba(58,125,153,.35);border-radius:16px}
+.a5 *{box-sizing:border-box}
+.a5-head{display:flex;align-items:center;gap:1em;padding-bottom:.7em;border-bottom:2px solid #3A7D99;position:relative}
+.a5-logo{width:3.6em;height:3.6em;border-radius:.6em;object-fit:cover}
+.a5-brandbox{flex:1}
+.a5-brand{font-family:Georgia,serif;font-size:1.85em;font-weight:700;color:#2A5F78;letter-spacing:.08em;line-height:1.1}
+.a5-sub{font-size:.62em;letter-spacing:.18em;text-transform:uppercase;color:#7A8FA0;margin-top:.3em}
+.a5-idbox{text-align:right}
+.a5-id{font-family:Georgia,serif;font-size:1.95em;font-weight:700;color:#3A7D99;letter-spacing:.04em;line-height:1.1}
+.a5-date{font-size:.72em;color:#7A8FA0;margin-top:.2em}
+.a5-body{flex:1;min-height:0;display:flex;gap:1.5em;margin-top:.9em;position:relative}
+.a5-left{flex:1;min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column}
+.a5-right{width:19.5em;flex:none;min-height:0;overflow:hidden}
+.a5-cust{display:flex;gap:2em}
+.a5-cust div{flex:1}
+.a5-k{font-size:.58em;letter-spacing:.16em;text-transform:uppercase;color:#7A8FA0;font-weight:600}
+.a5-v{font-size:.95em;font-weight:600;color:#2C3E50}
+.a5-sec{font-size:.58em;letter-spacing:.16em;text-transform:uppercase;color:#3A7D99;font-weight:600;margin:.85em 0 .3em}
+.a5-guests{font-size:.78em;color:#2C3E50}
+.a5-tbl{width:100%;border-collapse:collapse;font-size:.78em}
+.a5-tbl th{font-size:.78em;letter-spacing:.08em;text-transform:uppercase;color:#7A8FA0;font-weight:600;text-align:left;padding:.3em .4em;border-bottom:1.5px solid rgba(58,125,153,.35)}
+.a5-tbl td{padding:.42em .4em;border-bottom:1px solid rgba(58,125,153,.15);vertical-align:top}
+.a5-tbl .r{text-align:right;white-space:nowrap}
+.a5-tbl .nw{white-space:nowrap}
+.a5-tbl .n{font-weight:600}
+.a5-total{display:flex;justify-content:space-between;align-items:baseline;margin-top:auto;padding:.55em .8em;background:#F0F7FA;border-radius:.6em}
+.a5-total span{font-size:.7em;letter-spacing:.14em;text-transform:uppercase;color:#2A5F78;font-weight:600}
+.a5-total b{font-family:Georgia,serif;font-size:1.55em;color:#2A5F78}
+.a5-bank{background:#F0F7FA;border:1px solid rgba(58,125,153,.25);border-radius:.9em;padding:.9em 1em;text-align:center}
+.a5-bt{font-size:.58em;letter-spacing:.16em;text-transform:uppercase;color:#2A5F78;font-weight:600;margin-bottom:.5em}
+.a5-br{display:flex;justify-content:space-between;gap:.8em;font-size:.72em;text-align:left;padding:.22em 0;border-bottom:1px solid rgba(58,125,153,.12)}
+.a5-br span:first-child{color:#7A8FA0}
+.a5-br b{font-weight:600;text-align:right}
+.a5-note{font-size:.62em;color:#7A8FA0;text-align:left;margin-top:.4em}
+.a5-qr{width:11.2em;height:11.2em;object-fit:contain;display:block;margin:.7em auto .2em;background:#fff;border-radius:.4em}
+.a5-qrl{font-size:.6em;color:#7A8FA0}
+.a5-foot{text-align:center;font-size:.6em;color:#7A8FA0;padding-top:.6em;margin-top:.7em;border-top:1px solid rgba(58,125,153,.2);position:relative}
+.a5-foot b{color:#2A5F78;letter-spacing:.12em}
 </style>
 </head>
 <body>
@@ -616,6 +659,15 @@ function showDetail(id){
     <div style="font-size:11px;color:#7A8FA0;margin-top:2px">Mỗi dịch vụ là một tin nhắn riêng. Cần nhập giá net ở mục trên trước.</div>
   </div>
 
+  <div class="card">
+    <div class="sec-title"><i class="ti ti-photo"></i>Phiếu xác nhận dạng ảnh (A5 ngang)</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <button class="btn-outline" onclick="saveSlipImage('${id}')"><i class="ti ti-download"></i>Lưu ảnh</button>
+      <button class="btn-outline" onclick="copySlipImage('${id}')"><i class="ti ti-copy"></i>Copy ảnh</button>
+    </div>
+    <div style="font-size:11px;color:#7A8FA0;margin-top:6px">Copy ảnh để dán thẳng vào Zalo trên máy tính. Trên điện thoại, dùng Lưu ảnh.</div>
+  </div>
+
   <div class="act-row" style="grid-template-columns:1fr 1fr 1fr">
     <button class="btn-outline" onclick="copyText('${id}')"><i class="ti ti-copy"></i>Copy Zalo</button>
     <button class="btn-calendar" onclick="addToCalendar('${id}')"><i class="ti ti-calendar-plus"></i>Calendar</button>
@@ -746,6 +798,104 @@ function copyText(id){
   const remainLine = getRemainText(b);
   const txt=`🌊 SERENE TRAVEL - XÁC NHẬN ĐẶT DỊCH VỤ\n\nMã booking: ${b.id}\nNgày: ${b.created}\n\nĐại diện: ${b.name}\nSĐT: ${b.phone}${gl}\n\n${blocks}\n\nTỔNG CỘNG: ${VND(b.totalAmt)}${payLine}${remainLine}\n\nTHÔNG TIN CHUYỂN KHOẢN:\n  MB Bank · ${STK}\n  Người nhận: NGUYEN DUY HA\n  Nội dung: Quý khách vui lòng để nội dung mặc định\n\n🏣 SERENE TRAVEL\n📍 Đường Lư Giang, Phước Trung, Nam Nha Trang, Khánh Hòa\n📞 0327 818 196`;
   copyToClipboard(txt,"Đã copy! Paste vào Zalo.");
+}
+
+
+// ── Phiếu xác nhận dạng ảnh (A5 ngang) ──
+const SLIP_ID_LOGO = LOGO;
+function esc(t){ return String(t==null?"":t).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function qtyFull(s){
+  let t=`${s.qty1} ${s.unit1||""}`.trim();
+  if(s.qty2!==null&&s.qty2!==undefined) t+=` x ${s.qty2} ${s.unit2||""}`;
+  return t.trim();
+}
+async function fetchQrDataUrl(amount, info){
+  const res=await fetch("/api/booking-qr?amount="+encodeURIComponent(amount)+"&info="+encodeURIComponent(info),{cache:"no-store"});
+  if(!res.ok) throw new Error("QR "+res.status);
+  const blob=await res.blob();
+  return new Promise((ok,fail)=>{ const fr=new FileReader(); fr.onload=()=>ok(fr.result); fr.onerror=fail; fr.readAsDataURL(blob); });
+}
+function slipHtml(b, qrSrc){
+  const paid=b.payments.reduce((a,p)=>a+p.amount,0), remain=b.totalAmt-paid;
+  const guests=b.guests?b.guests.split("\n").map(g=>g.trim()).filter(Boolean):[];
+  const rows=b.svcs.map(s=>{
+    const st=stayInfo(s);
+    const date=!st?"—":(st.dIn===st.dOut||!st.dOut)?esc(st.dIn):`${esc(st.dIn)} → ${esc(st.dOut)}${st.nights?` (${st.nights} đêm)`:""}`;
+    return `<tr><td class="n">${esc(s.name)}</td><td class="nw">${date}</td><td class="nw">${esc(qtyFull(s))}</td><td class="r">${VNDn(s.price)}</td><td class="r n">${VNDn(s.total)}</td></tr>`;
+  }).join("");
+  return `
+  <div class="a5-head">
+    <img class="a5-logo" src="${SLIP_ID_LOGO}" alt="">
+    <div class="a5-brandbox"><div class="a5-brand">SERENE TRAVEL</div><div class="a5-sub">Xác nhận dịch vụ du lịch</div></div>
+    <div class="a5-idbox"><div class="a5-id">${esc(b.id)}</div><div class="a5-date">Ngày ${esc(b.created)}</div></div>
+  </div>
+  <div class="a5-body">
+    <div class="a5-left">
+      <div class="a5-cust">
+        <div><div class="a5-k">Đại diện</div><div class="a5-v">${esc(b.name)}</div></div>
+        <div><div class="a5-k">Điện thoại</div><div class="a5-v">${esc(b.phone)}</div></div>
+      </div>
+      ${guests.length?`<div class="a5-sec">Danh sách khách</div><div class="a5-guests">${guests.map(esc).join(" &nbsp;·&nbsp; ")}</div>`:""}
+      <div class="a5-sec">Dịch vụ</div>
+      <table class="a5-tbl"><thead><tr><th>Dịch vụ</th><th>Ngày</th><th>Số lượng</th><th class="r">Đơn giá</th><th class="r">Thành tiền</th></tr></thead><tbody>${rows}</tbody></table>
+      <div class="a5-total"><span>Tổng cộng</span><b>${VND(b.totalAmt)}</b></div>
+    </div>
+    <div class="a5-right"><div class="a5-bank">
+      <div class="a5-bt">Thanh toán chuyển khoản</div>
+      <div class="a5-br"><span>Ngân hàng</span><b>MB Bank</b></div>
+      <div class="a5-br"><span>Số tài khoản</span><b>${STK}</b></div>
+      <div class="a5-br"><span>Người nhận</span><b>NGUYEN DUY HA</b></div>
+      <div class="a5-note">Nội dung: Quý khách vui lòng để nội dung mặc định</div>
+      ${qrSrc?`<img class="a5-qr" src="${qrSrc}" alt="QR"><div class="a5-qrl">Quét để thanh toán</div>`:""}
+    </div></div>
+  </div>
+  <div class="a5-foot"><b>SERENE TRAVEL</b> &nbsp;·&nbsp; Đường Lư Giang, Phước Trung, Nam Nha Trang, Khánh Hòa &nbsp;·&nbsp; 0327 818 196 &nbsp;·&nbsp; serenetravelvn@gmail.com</div>`;
+}
+function waitImages(root){
+  return Promise.all([...root.querySelectorAll("img")].map(im=>im.complete&&im.naturalWidth?Promise.resolve():new Promise(ok=>{ im.onload=ok; im.onerror=ok; })));
+}
+// Tạo ảnh PNG của phiếu. Trả về Promise<Blob>. Nếu nhiều dịch vụ, tự thu nhỏ chữ cho vừa khổ A5.
+async function makeSlip(id){
+  const b=bookings.find(x=>x.id===id); if(!b) throw new Error("Không thấy đơn");
+  if(typeof html2canvas!=="function") throw new Error("Thiếu thư viện chụp ảnh");
+  const paid=b.payments.reduce((a,p)=>a+p.amount,0), remain=b.totalAmt-paid;
+  let qr="";
+  try{ qr=await fetchQrDataUrl(remain>0?remain:b.totalAmt, b.id); }
+  catch(e){ console.error(e); toast("Không tải được mã QR, ảnh sẽ không có QR"); }
+  let host=$("a5-host");
+  if(!host){ host=document.createElement("div"); host.id="a5-host"; document.body.appendChild(host); }
+  host.innerHTML='<div class="a5" id="a5-root">'+slipHtml(b,qr)+'</div>';
+  const root=$("a5-root");
+  try{
+    if(document.fonts&&document.fonts.ready) await document.fonts.ready;
+    await waitImages(root);
+    const left=root.querySelector(".a5-left"), right=root.querySelector(".a5-right");
+    const fits=()=>[left,right].every(el=>el.scrollHeight<=el.clientHeight+1&&el.scrollWidth<=el.clientWidth+1);
+    let fs=23; root.style.fontSize=fs+"px";
+    while(!fits()&&fs>9){ fs-=0.5; root.style.fontSize=fs+"px"; }
+    if(!fits()) toast("Đơn có quá nhiều dịch vụ, ảnh có thể bị cắt bớt");
+    const canvas=await html2canvas(root,{scale:2,backgroundColor:"#ffffff",logging:false,useCORS:false});
+    return await new Promise((ok,fail)=>canvas.toBlob(bl=>bl?ok(bl):fail(new Error("Không tạo được ảnh")),"image/png"));
+  } finally { host.innerHTML=""; }
+}
+async function saveSlipImage(id){
+  toast("Đang tạo ảnh...");
+  try{
+    const blob=await makeSlip(id);
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a"); a.href=url; a.download=id+".png";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),4000);
+    toast("Đã lưu ảnh "+id+".png");
+  }catch(e){ console.error(e); toast("Chưa tạo được ảnh: "+e.message); }
+}
+async function copySlipImage(id){
+  if(!navigator.clipboard||!window.ClipboardItem){ toast("Trình duyệt này chưa hỗ trợ copy ảnh. Hãy dùng nút Lưu ảnh."); return; }
+  toast("Đang tạo ảnh...");
+  try{
+    await navigator.clipboard.write([new ClipboardItem({"image/png":makeSlip(id)})]);
+    toast("Đã copy ảnh! Dán vào Zalo.");
+  }catch(e){ console.error(e); toast("Chưa copy được ảnh: "+e.message+". Thử nút Lưu ảnh."); }
 }
 
 // Phiếu điều hành: mỗi dịch vụ 1 tin nhắn riêng gửi cho đúng đối tác

@@ -39,6 +39,14 @@ if(path==='/api/session'&&req.method==='GET')return json({email:EMAIL,csrf:sessi
 if(path==='/api/logout'&&req.method==='POST'){await env.DB.prepare('DELETE FROM sessions WHERE token=?').bind(await sha(token)).run();return json({ok:true},200,{'set-cookie':sessionCookie('',0,req)})}
 if(path==='/api/content'&&req.method==='GET'){const {results}=await env.DB.prepare('SELECT * FROM content ORDER BY updated DESC').all();return json({items:results.map(x=>({id:x.id,draft:JSON.parse(x.draft),published:x.published?JSON.parse(x.published):null,updated:x.updated}))})}
 if(path==='/api/upload'&&req.method==='POST'){if(!env.MEDIA)return json({error:'Chưa kết nối kho ảnh.'},503);const type=req.headers.get('content-type')||'',extensions={'image/jpeg':'jpg','image/png':'png','image/webp':'webp'};if(!extensions[type])return json({error:'Chỉ nhận JPG, PNG hoặc WebP.'},400);if(Number(req.headers.get('content-length')||0)>5*1024*1024)return json({error:'Ảnh tối đa 5 MB.'},413);const bytes=await req.arrayBuffer();if(bytes.byteLength>5*1024*1024)return json({error:'Ảnh tối đa 5 MB.'},413);const b=new Uint8Array(bytes);const signature=type==='image/jpeg'?b[0]===255&&b[1]===216&&b[2]===255:type==='image/png'?hex(bytes.slice(0,8))==='89504e470d0a1a0a':String.fromCharCode(...b.slice(0,4))==='RIFF'&&String.fromCharCode(...b.slice(8,12))==='WEBP';if(!signature)return json({error:'Tệp không phải ảnh hợp lệ.'},400);const key=crypto.randomUUID()+'.'+extensions[type];await env.MEDIA.put(key,bytes,{httpMetadata:{contentType:type}});return json({url:'/media/'+key})}
+if(path==='/api/booking-qr'&&req.method==='GET'){
+ // Lấy mã QR VietQR qua máy chủ để trình duyệt chụp ảnh phiếu được (không bị chặn khác nguồn). Tài khoản nhận cố định.
+ const amount=u.searchParams.get('amount')||'0',info=u.searchParams.get('info')||'';
+ if(!/^\d{1,10}$/.test(amount)||!/^[A-Za-z0-9 ]{0,50}$/.test(info))return json({error:'Tham số QR không hợp lệ.'},400);
+ let r;try{r=await fetch('https://img.vietqr.io/image/970422-0327818196-compact2.png?accountName=NGUYEN+DUY+HA'+(Number(amount)>0?'&amount='+amount:'')+(info?'&addInfo='+encodeURIComponent(info):''),{signal:AbortSignal.timeout(10000)})}catch{return json({error:'Không lấy được mã QR.'},502)}
+ if(!r.ok||!(r.headers.get('content-type')||'').startsWith('image/'))return json({error:'Không lấy được mã QR.'},502);
+ return new Response(r.body,{headers:{'content-type':r.headers.get('content-type'),'cache-control':'private, max-age=300','x-content-type-options':'nosniff'}})
+}
 if(path==='/api/booking'){
  if(!env.JSONBIN_KEY||!/^[a-zA-Z0-9_-]{8,64}$/.test(env.JSONBIN_BIN_ID||''))return json({error:'Chưa thiết lập kho đơn hàng.'},503);
  const url='https://api.jsonbin.io/v3/b/'+env.JSONBIN_BIN_ID;
