@@ -52,3 +52,21 @@ test('Booking page gets the extra CSP; the rest of /admin and the site keep the 
  const booking=await csp('/admin/booking/');assert.match(booking,/img\.vietqr\.io/);assert.match(booking,/cdn\.jsdelivr\.net/);
  for(const p of ['/','/admin/','/admin/admin.js']){const c=await csp(p);assert.ok(!c.includes('vietqr')&&!c.includes('jsdelivr'),p)}
  env.close()});
+test('QR proxy: needs login, checks input, only talks to VietQR',async()=>{
+ const env=await runtime({passwordHash:hash});
+ let cookie='';const urls=[];const realFetch=globalThis.fetch;
+ globalThis.fetch=async url=>{urls.push(String(url));return new Response(new Uint8Array([137,80,78,71]),{status:200,headers:{'content-type':'image/png'}})};
+ try{
+  const call=(path)=>worker.fetch(new Request(origin+'/api/'+path,{headers:{origin,...(cookie?{cookie}:{})}}),env);
+  assert.equal((await call('booking-qr?amount=1000&info=ST1')).status,401);assert.equal(urls.length,0);
+  const login=await worker.fetch(new Request(origin+'/api/login',{method:'POST',headers:{origin,'content-type':'application/json'},body:JSON.stringify({email:'serenetravelvn@gmail.com',password:pass})}),env);
+  cookie=login.headers.get('set-cookie').split(';')[0];
+  const ok=await call('booking-qr?amount=1700000&info=ST26092901');assert.equal(ok.status,200);assert.equal(ok.headers.get('content-type'),'image/png');
+  assert.match(urls[0],/^https:\/\/img\.vietqr\.io\/image\/970422-0327818196-compact2\.png\?/);assert.match(urls[0],/amount=1700000/);assert.match(urls[0],/addInfo=ST26092901/);
+  const before=urls.length;
+  for(const bad of ['amount=abc&info=x','amount=1&info=%3Cscript%3E','amount=99999999999&info=x','amount=1&info='+'a'.repeat(51)])assert.equal((await call('booking-qr?'+bad)).status,400,bad);
+  assert.equal(urls.length,before);
+  globalThis.fetch=async()=>new Response('{}',{status:500});assert.equal((await call('booking-qr?amount=1&info=ST1')).status,502);
+  globalThis.fetch=async()=>new Response('<html>',{status:200,headers:{'content-type':'text/html'}});assert.equal((await call('booking-qr?amount=1&info=ST1')).status,502);
+ }finally{globalThis.fetch=realFetch;env.close()}
+});
