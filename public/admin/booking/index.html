@@ -19,7 +19,7 @@ body{background:#F0F4F8;min-height:100vh;font-family:"Be Vietnam Pro",sans-serif
 .brand-sub{font-size:10px;color:#7A8FA0;letter-spacing:1.5px;text-transform:uppercase}
 .bk-num{font-family:Georgia,serif;font-size:22px;font-weight:700;color:#3A7D99;text-align:right}
 .bk-lbl{font-size:10px;color:#7A8FA0;text-align:right}
-.tabs{display:grid;grid-template-columns:1fr 1fr 1fr;background:#fff;border:.5px solid rgba(58,125,153,.15);border-radius:12px;overflow:hidden;margin-bottom:.75rem}
+.tabs{display:grid;grid-template-columns:repeat(4,1fr);background:#fff;border:.5px solid rgba(58,125,153,.15);border-radius:12px;overflow:hidden;margin-bottom:.75rem}
 .tab{padding:10px 6px;font-size:12.5px;font-family:inherit;font-weight:500;color:#7A8FA0;background:none;border:none;border-right:.5px solid rgba(58,125,153,.15);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px}
 .tab:last-child{border-right:none}
 .tab.active{background:#3A7D99;color:#fff}
@@ -196,6 +196,7 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
 .a5-note{font-size:.62em;color:#7A8FA0;text-align:left;margin-top:.4em}
 .a5-qr{width:11.2em;height:11.2em;object-fit:contain;display:block;margin:.7em auto .2em;background:#fff;border-radius:.4em}
 .a5-qrl{font-size:.6em;color:#7A8FA0}
+.a5-notebox{font-size:.62em;color:#5A6F7D;margin-top:.6em;white-space:pre-line;line-height:1.35}
 .a5-foot{text-align:center;font-size:.6em;color:#7A8FA0;padding-top:.6em;margin-top:.7em;border-top:1px solid rgba(58,125,153,.2);position:relative}
 .a5-foot b{color:#2A5F78;letter-spacing:.12em}
 </style>
@@ -222,6 +223,7 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
   <button class="tab active" onclick="switchTab('new')"><i class="ti ti-plus"></i>Tạo đơn</button>
   <button class="tab" onclick="switchTab('list')"><i class="ti ti-list"></i>Danh sách</button>
   <button class="tab" onclick="switchTab('stats')"><i class="ti ti-chart-bar"></i>Thống kê</button>
+  <button class="tab" onclick="switchTab('settings')"><i class="ti ti-settings"></i>Thiết lập</button>
 </div>
 
 <button onclick="syncFromSheet();renderList();" style="width:100%;padding:7px;background:none;border:.5px solid rgba(58,125,153,.2);border-radius:9px;font-size:12px;color:#3A7D99;cursor:pointer;margin-bottom:.75rem;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px">
@@ -265,6 +267,32 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
   <div class="stat-grid" id="stat-grid"></div>
   <button class="btn-outline" style="width:100%;margin-bottom:.75rem" onclick="downloadCSV()"><i class="ti ti-file-spreadsheet"></i>Tải bảng đơn hàng (CSV, mở bằng Excel / Google Sheets)</button>
   <div class="card" id="stat-list"></div>
+</div>
+
+<div class="panel" id="panel-settings">
+  <div class="card">
+    <div class="sec-title"><i class="ti ti-ruler"></i>Đơn vị tự thêm</div>
+    <div id="unit-list"></div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <input id="unit-new" maxlength="20" placeholder="Đơn vị mới (VD: suất, bàn, gói)" style="flex:1">
+      <button class="btn-outline" onclick="addUnitFromSettings()"><i class="ti ti-plus"></i>Thêm</button>
+    </div>
+    <div style="font-size:11px;color:#7A8FA0;margin-top:6px">Đơn vị có sẵn (vé, phòng, đêm...) không xóa được. Xóa đơn vị tự thêm không làm đổi chữ trong các đơn đã tạo.</div>
+  </div>
+  <div class="card">
+    <div class="sec-title"><i class="ti ti-note"></i>Ghi chú cuối phiếu</div>
+    <textarea id="set-slip-note" maxlength="300" placeholder="VD: Hủy hoặc đổi dịch vụ trước 3 ngày để không mất phí. Để trống nếu không cần."></textarea>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+      <button class="btn-main" style="margin-top:0" onclick="saveSlipNote()"><i class="ti ti-device-floppy"></i>Lưu ghi chú</button>
+      <button class="btn-outline" onclick="previewSlip()"><i class="ti ti-eye"></i>Xem thử phiếu</button>
+    </div>
+    <div style="font-size:11px;color:#7A8FA0;margin-top:6px">Ghi chú in ở dưới cùng phiếu A5, trên dòng thông tin liên hệ. Xem thử dùng đơn đang chọn hoặc đơn mới nhất.</div>
+    <img id="slip-preview" alt="" style="display:none;width:100%;margin-top:10px;border:.5px solid rgba(58,125,153,.2);border-radius:8px">
+  </div>
+  <div class="card">
+    <div class="sec-title"><i class="ti ti-database"></i>Dữ liệu</div>
+    <button class="btn-outline" style="width:100%" onclick="downloadCSV()"><i class="ti ti-file-spreadsheet"></i>Tải bảng đơn hàng (CSV, mở bằng Excel / Google Sheets)</button>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -318,7 +346,7 @@ async function syncFromSheet() {
     renderList();
     if (selId) showDetail(selId);
     auto.forEach(b => saveBooking(b));
-    loadUnits();
+    loadUnits(); loadSettings();
   } catch(e) {
     showSyncStatus("⚠️ Không tải được dữ liệu: " + e.message, true);
     console.error(e);
@@ -384,9 +412,10 @@ function toast(msg){
 
 function switchTab(tab){
   document.querySelectorAll(".tab").forEach((t,i)=>t.classList.toggle("active",["new","list","stats"][i]===tab));
-  document.querySelectorAll(".panel").forEach((p,i)=>p.classList.toggle("active",["panel-new","panel-list","panel-stats"][i]==="panel-"+tab));
+  document.querySelectorAll(".panel").forEach((p,i)=>p.classList.toggle("active",["panel-new","panel-list","panel-stats","panel-settings"][i]==="panel-"+tab));
   if(tab==="list") renderList();
   if(tab==="stats") renderStats();
+  if(tab==="settings") renderSettings();
 }
 
 function parseDate6(raw) {
@@ -504,25 +533,70 @@ async function loadUnits(){
   try{ const d=await apiBooking("GET", undefined, "/api/booking-units"); customUnits=Array.isArray(d.units)?d.units:[]; refreshUnitSelects(); }
   catch(e){ console.warn("Chưa tải được đơn vị tự thêm:", e.message); }
 }
+// Thêm đơn vị: trả về tên cuối cùng (có thể là đơn vị đã có) hoặc null nếu tên không hợp lệ
+async function registerUnit(raw){
+  const name=(raw||"").trim().replace(/\s+/g," ");
+  if(!name) return null;
+  if(name.length>20||/[<>"&]/.test(name)){ toast("Tên đơn vị tối đa 20 ký tự, không dùng < > \" &"); return null; }
+  const exist=[...UNITS1,...UNITS2,...customUnits].find(u=>u.toLowerCase()===name.toLowerCase());
+  if(exist) return exist;
+  customUnits.push(name);
+  try{ await apiBooking("POST", {name}, "/api/booking-units"); toast("Đã thêm đơn vị: "+name); }
+  catch(e){ showSyncStatus("⚠️ Đơn vị dùng được cho đơn này nhưng chưa lưu lâu dài: "+e.message, true); }
+  return name;
+}
 async function unitChanged(sel){
   if(sel.value!=="__add__"){ sel.dataset.prev=sel.value; return; }
   const prev=sel.dataset.prev||"";
-  const raw=prompt("Nhập tên đơn vị mới (ví dụ: suất, bàn, gói):");
-  const name=(raw||"").trim().replace(/\s+/g," ");
-  if(!name){ sel.value=prev; return; }
-  if(name.length>20||/[<>"&]/.test(name)){ toast("Tên đơn vị tối đa 20 ký tự, không dùng < > \" &"); sel.value=prev; return; }
-  const all=[...UNITS1,...UNITS2,...customUnits];
-  const exist=all.find(u=>u.toLowerCase()===name.toLowerCase());
-  const finalName=exist||name;
-  if(!exist){
-    customUnits.push(finalName);
-    try{ await apiBooking("POST", {name:finalName}, "/api/booking-units"); toast("Đã thêm đơn vị: "+finalName); }
-    catch(e){ showSyncStatus("⚠️ Đơn vị dùng được cho đơn này nhưng chưa lưu lâu dài: "+e.message, true); }
-  }
-  sel.dataset.prev=finalName;
+  const finalName=await registerUnit(prompt("Nhập tên đơn vị mới (ví dụ: suất, bàn, gói):"));
+  if(!finalName){ sel.value=prev; return; }
   refreshUnitSelects();
   sel.value=finalName; sel.dataset.prev=finalName;
 }
+async function addUnitFromSettings(){
+  const inp=$("unit-new"); const n=await registerUnit(inp.value);
+  if(n){ inp.value=""; refreshUnitSelects(); renderUnitList(); }
+}
+async function removeUnit(name){
+  if(!confirm("Xóa đơn vị \""+name+"\" khỏi danh sách chọn? Các đơn đã tạo vẫn giữ nguyên chữ.")) return;
+  try{ await apiBooking("DELETE", undefined, "/api/booking-units?name="+encodeURIComponent(name)); }
+  catch(e){ showSyncStatus("⚠️ Xóa chưa được: "+e.message, true); return; }
+  customUnits=customUnits.filter(u=>u!==name);
+  refreshUnitSelects(); renderUnitList(); toast("Đã xóa đơn vị: "+name);
+}
+function renderUnitList(){
+  const el=$("unit-list"); if(!el) return;
+  el.innerHTML=customUnits.length?customUnits.map(u=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:.5px solid rgba(58,125,153,.1)"><span>${escAttr(u)}</span><button class="btn-del" data-unit="${escAttr(u)}" onclick="removeUnit(this.dataset.unit)">✕</button></div>`).join(""):'<div class="no-pay">Chưa có đơn vị tự thêm nào</div>';
+}
+// ── Thiết lập: ghi chú cuối phiếu ──
+let slipNote="";
+async function loadSettings(){
+  try{ const d=await apiBooking("GET", undefined, "/api/booking-settings"); slipNote=(d.settings&&d.settings.slipNote)||""; }
+  catch(e){ console.warn("Chưa tải được thiết lập:", e.message); }
+}
+function renderSettings(){
+  renderUnitList();
+  const ta=$("set-slip-note"); if(ta&&document.activeElement!==ta) ta.value=slipNote;
+}
+async function saveSlipNote(){
+  const v=$("set-slip-note").value.trim();
+  if(v.length>300){ toast("Ghi chú tối đa 300 ký tự"); return; }
+  try{ await apiBooking("PUT", {slipNote:v}, "/api/booking-settings"); slipNote=v; $("set-slip-note").value=v; toast("Đã lưu ghi chú cuối phiếu"); }
+  catch(e){ showSyncStatus("⚠️ Lưu ghi chú chưa được: "+e.message, true); }
+}
+async function previewSlip(){
+  const id=(selId&&bookings.find(b=>b.id===selId))?selId:(bookings.length?bookings[bookings.length-1].id:null);
+  if(!id){ toast("Chưa có đơn nào để xem thử"); return; }
+  const keep=slipNote; slipNote=$("set-slip-note").value.trim();
+  try{
+    toast("Đang tạo ảnh xem thử...");
+    const blob=await makeSlip(id);
+    const url=await new Promise((ok,fail)=>{ const r=new FileReader(); r.onload=()=>ok(r.result); r.onerror=fail; r.readAsDataURL(blob); });
+    const img=$("slip-preview"); img.src=url; img.style.display="block";
+  }catch(e){ toast("Không tạo được ảnh xem thử"); console.error(e); }
+  finally{ slipNote=keep; }
+}
+
 function escAttr(v){ return String(v==null?"":v).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
 function addSvc(s){
   svcCount++;
@@ -975,6 +1049,7 @@ function slipHtml(b, qrSrc){
       ${qrSrc?`<img class="a5-qr" src="${qrSrc}" alt="QR"><div class="a5-qrl">Quét để thanh toán</div>`:""}
     </div></div>
   </div>
+  ${slipNote?`<div class="a5-notebox">${esc(slipNote)}</div>`:""}
   <div class="a5-foot"><b>SERENE TRAVEL</b> &nbsp;·&nbsp; Đường Lư Giang, Phước Trung, Nam Nha Trang, Khánh Hòa &nbsp;·&nbsp; 0327 818 196 &nbsp;·&nbsp; serenetravelvn@gmail.com</div>`;
 }
 function waitImages(root){

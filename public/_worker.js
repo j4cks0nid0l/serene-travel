@@ -59,7 +59,24 @@ if(path==='/api/booking-units'){
    const c=await env.BOOKINGS.prepare('SELECT COUNT(*) AS n FROM booking_units').first();if((c?.n||0)>=100)return json({error:'Đã có quá nhiều đơn vị.'},400);
    await env.BOOKINGS.prepare('INSERT OR IGNORE INTO booking_units(name,created) VALUES(?,?)').bind(name,new Date().toISOString()).run();return json({ok:true,name})
   }
+  if(req.method==='DELETE'){
+   const name=(u.searchParams.get('name')||'').trim();if(!name||name.length>20)return json({error:'Thiếu tên đơn vị.'},400);
+   await env.BOOKINGS.prepare('DELETE FROM booking_units WHERE name=?').bind(name).run();return json({ok:true})
+  }
  }catch{return json({error:'Chưa có bảng đơn vị. Cần chạy thêm lệnh tạo bảng trong D1.'},503)}
+ return json({error:'Không hỗ trợ.'},405)
+}
+if(path==='/api/booking-settings'){
+ if(!env.BOOKINGS)return json({error:'Chưa kết nối kho đơn hàng.'},503);
+ try{
+  if(req.method==='GET'){const {results}=await env.BOOKINGS.prepare('SELECT key,value FROM booking_settings').all();const out={};for(const r of results)out[r.key]=r.value;return json({settings:{slipNote:out.slipNote||''}})}
+  if(req.method==='PUT'){
+   let input;try{input=await req.json()}catch{return json({error:'Nội dung không hợp lệ.'},400)}
+   const note=input?.slipNote;
+   if(typeof note!=='string'||note.length>300)return json({error:'Ghi chú tối đa 300 ký tự.'},400);
+   await env.BOOKINGS.prepare('INSERT INTO booking_settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind('slipNote',note.trim()).run();return json({ok:true})
+  }
+ }catch{return json({error:'Chưa có bảng thiết lập. Cần chạy thêm lệnh tạo bảng trong D1.'},503)}
  return json({error:'Không hỗ trợ.'},405)
 }
 if(path==='/api/booking'||path.startsWith('/api/booking/')){

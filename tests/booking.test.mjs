@@ -64,7 +64,19 @@ test('Custom units: login required, saved once, validated',async()=>{
   assert.equal((await call('booking-units','POST',{name:'bàn'})).status,200);
   assert.deepEqual((await (await call('booking-units')).json()).units,['suất','bàn']);
   for(const bad of ['',' ','a'.repeat(21),'<b>','x"y',undefined,5])assert.equal((await call('booking-units','POST',{name:bad})).status,400);
-  assert.equal((await call('booking-units','DELETE')).status,405);
+  assert.equal((await call('booking-units','DELETE')).status,400);
+  assert.equal((await call('booking-units?name='+encodeURIComponent('suất'),'DELETE')).status,200);
+  assert.deepEqual((await (await call('booking-units')).json()).units,['bàn']);
+  assert.equal((await call('booking-units','PATCH')).status,405);
+  // Slip note setting
+  assert.equal((await call('booking-settings')).status,200);
+  assert.equal((await (await call('booking-settings')).json()).settings.slipNote,'');
+  assert.equal((await call('booking-settings','PUT',{slipNote:'  Hủy trước 3 ngày  '})).status,200);
+  assert.equal((await (await call('booking-settings')).json()).settings.slipNote,'Hủy trước 3 ngày');
+  assert.equal((await call('booking-settings','PUT',{slipNote:'x'.repeat(301)})).status,400);
+  assert.equal((await call('booking-settings','PUT',{slipNote:5})).status,400);
+  assert.equal((await call('booking-settings','PUT',{slipNote:''})).status,200);
+  assert.equal((await (await call('booking-settings')).json()).settings.slipNote,'');
  }finally{env.close()}
 });
 
