@@ -99,3 +99,5 @@ Cài đặt trên Cloudflare:
 Biến `JSONBIN_KEY` và `JSONBIN_BIN_ID` không còn được dùng và có thể xóa. Trang booking có nút tải bảng đơn hàng dạng CSV (tab Thống kê) để mở bằng Excel hoặc Google Sheets.
 
 Đơn vị tự thêm (ví dụ "suất", "bàn") lưu trong bảng `booking_units` của cùng database, nên dùng được ở mọi máy. Nếu database tạo từ trước, chạy thêm lệnh `CREATE TABLE IF NOT EXISTS booking_units (name TEXT PRIMARY KEY, created TEXT NOT NULL);` trong Console của D1.
+
+Tab Thiết lập của trang booking: quản lý đơn vị tự thêm, ghi chú cuối phiếu A5 (lưu trong bảng `booking_settings`) và tải CSV. Nếu database tạo từ trước, chạy thêm: `CREATE TABLE IF NOT EXISTS booking_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);`
