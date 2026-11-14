@@ -7,6 +7,11 @@ binding = "DB"
 database_name = "serene-content"
 database_id = "00000000-0000-0000-0000-000000000000" # Replace before deploying.
 
+[[d1_databases]]
+binding = "BOOKINGS"
+database_name = "serene-bookings"
+database_id = "00000000-0000-0000-0000-000000000000" # Replace before deploying.
+
 [[r2_buckets]]
 binding = "MEDIA"
 bucket_name = "serene-images"

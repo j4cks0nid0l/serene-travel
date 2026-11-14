@@ -227,6 +227,10 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
   <i class="ti ti-refresh"></i>Làm mới dữ liệu
 </button>
 <div class="panel active" id="panel-new">
+  <div id="edit-banner" style="display:none;margin-bottom:.75rem;padding:10px 12px;background:#FFF6E5;border:.5px solid rgba(200,150,60,.4);border-radius:9px;font-size:13px;color:#8A5E10;align-items:center;justify-content:space-between;gap:8px">
+    <span id="edit-banner-txt"></span>
+    <button class="btn-outline" onclick="cancelEdit()" style="padding:5px 10px;font-size:12px">Hủy sửa</button>
+  </div>
   <div class="card">
     <div class="sec-title"><i class="ti ti-user-circle"></i>Thông tin khách hàng</div>
     <div class="field-row">
@@ -248,7 +252,7 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
       <span class="total-val" id="grand-total">0 đ</span>
     </div>
   </div>
-  <button class="btn-main" onclick="createBooking()"><i class="ti ti-file-check"></i>Tạo đơn hàng</button>
+  <button class="btn-main" id="btn-create" onclick="createBooking()"><i class="ti ti-file-check"></i>Tạo đơn hàng</button>
 </div>
 
 <div class="panel" id="panel-list">
@@ -258,6 +262,7 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
 
 <div class="panel" id="panel-stats">
   <div class="stat-grid" id="stat-grid"></div>
+  <button class="btn-outline" style="width:100%;margin-bottom:.75rem" onclick="downloadCSV()"><i class="ti ti-file-spreadsheet"></i>Tải bảng đơn hàng (CSV, mở bằng Excel / Google Sheets)</button>
   <div class="card" id="stat-list"></div>
 </div>
 
@@ -282,13 +287,13 @@ function showSyncStatus(msg, isErr) {
   el.style.color = isErr ? "#B85C5C" : "#3A7D99";
 }
 
-async function apiBooking(method, body) {
+async function apiBooking(method, body, path) {
   if (!CSRF) {
     const sres = await fetch("/api/session", {cache:"no-store"});
     if (sres.status === 401) { location.href = "/admin/"; throw new Error("Chưa đăng nhập"); }
     CSRF = (await sres.json()).csrf || "";
   }
-  const res = await fetch("/api/booking", {
+  const res = await fetch(path || "/api/booking", {
     method,
     cache: "no-store",
     headers: method === "GET" ? {} : {"content-type":"application/json","x-csrf-token":CSRF},
@@ -296,7 +301,7 @@ async function apiBooking(method, body) {
   });
   if (res.status === 401) { location.href = "/admin/"; throw new Error("Chưa đăng nhập"); }
   const json = await res.json().catch(()=>({}));
-  if (!res.ok) throw new Error(json.error || "Lỗi máy chủ");
+  if (!res.ok) { const err = new Error(json.error || "Lỗi máy chủ"); err.status = res.status; throw err; }
   return json;
 }
 
@@ -311,7 +316,7 @@ async function syncFromSheet() {
     showSyncStatus("");
     renderList();
     if (selId) showDetail(selId);
-    if (auto) save();
+    auto.forEach(b => saveBooking(b));
   } catch(e) {
     showSyncStatus("⚠️ Không tải được dữ liệu: " + e.message, true);
     console.error(e);
@@ -337,19 +342,37 @@ function genId(){
   return prefix+String(xx).padStart(2,"0");
 }
 function getQr(amt,info){ return `https://img.vietqr.io/image/${BANK_BIN}-${STK}-compact2.png?accountName=NGUYEN+DUY+HA${amt>0?`&amount=${amt}`:""}${info?`&addInfo=${encodeURIComponent(info)}`:""}` }
-async function save() {
-  $("bk-count").textContent = bookings.length;
+function updateCount(){ $("bk-count").textContent = bookings.length; }
+// Mỗi đơn lưu riêng một dòng trong kho D1, nên sửa đơn này không đụng tới đơn khác
+async function saveBooking(b) {
+  updateCount();
   if (!loaded) {
-    showSyncStatus("⚠️ Chưa tải được dữ liệu nên chưa lưu. Bấm đồng bộ lại rồi thử lại.", true);
-    return;
+    showSyncStatus("⚠️ Chưa tải được dữ liệu nên chưa lưu. Bấm làm mới rồi thử lại.", true);
+    return false;
   }
   try {
-    await apiBooking("PUT", {bookings});
+    await apiBooking("PUT", {booking:b}, "/api/booking/" + b.id);
     showSyncStatus("");
+    return true;
   } catch(e) {
     showSyncStatus("⚠️ Lưu chưa được: " + e.message, true);
     console.error("Save error:", e);
+    return false;
   }
+}
+// Tạo đơn mới: nếu mã bị trùng (máy khác vừa tạo) thì đổi sang mã kế tiếp và thử lại
+async function createRemote(b) {
+  for (let t = 0; t < 5; t++) {
+    try { await apiBooking("POST", {booking:b}, "/api/booking"); showSyncStatus(""); return true; }
+    catch(e) {
+      if (e.status === 409) { b.id = genId(); selId = b.id; continue; }
+      showSyncStatus("⚠️ Lưu chưa được: " + e.message, true);
+      console.error("Create error:", e);
+      return false;
+    }
+  }
+  showSyncStatus("⚠️ Không tạo được mã đơn mới, bấm làm mới rồi thử lại.", true);
+  return false;
 }
 
 function toast(msg){
@@ -428,22 +451,30 @@ function calcTotal(){
     const sub=hasC2?p*q1*q2:p*q1;
     total+=sub;
     $("ss-"+i).textContent="Thành tiền: "+VNDn(sub)+" đ";
+    calcProfit(i);
   });
   $("grand-total").textContent=VNDn(total)+" đ";
 }
 
+function unitsOf(i){
+  const q1=parseInt($("sc1-"+i)?$("sc1-"+i).value:1)||1;
+  const c2el=$("sc2-"+i);
+  const hasC2=c2el&&c2el.value.trim()!=="";
+  return hasC2?q1*(parseInt(c2el.value)||1):q1;
+}
+// Giá net nhập là ĐƠN GIÁ, nhân với số lượng ra tổng net
 function calcProfit(i) {
   const price = parseNum($("sp-"+i)?$("sp-"+i).value:"");
-  const totalNetInput = parseNum($("snet-"+i)?$("snet-"+i).value:"");
-  const q1 = parseInt($("sc1-"+i)?$("sc1-"+i).value:1)||1;
-  const c2el = $("sc2-"+i);
-  const hasC2 = c2el&&c2el.value.trim()!=="";
-  const q2 = hasC2?(parseInt(c2el.value)||1):1;
-  const totalSell = hasC2?price*q1*q2:price*q1;
+  const unitNet = parseNum($("snet-"+i)?$("snet-"+i).value:"");
+  const units = unitsOf(i);
+  const totalSell = price*units;
+  const totalNet = unitNet*units;
+  const hint = $("snt-"+i);
+  if(hint) hint.textContent = unitNet>0 ? ("Tổng net: "+VNDn(unitNet)+" x "+units+" = "+VNDn(totalNet)+" đ") : "";
   const profEl = $("spro-"+i);
   if(!profEl) return;
-  if(totalNetInput>0 && price>0) {
-    const profit = totalSell - totalNetInput;
+  if(unitNet>0 && price>0) {
+    const profit = totalSell - totalNet;
     profEl.style.display="block";
     profEl.textContent = (profit>=0?"+ ":"- ")+VNDn(Math.abs(profit))+" đ";
     profEl.style.background = profit>=0?"#EDF7F2":"#FFE0E0";
@@ -451,6 +482,7 @@ function calcProfit(i) {
   } else { profEl.style.display="none"; }
 }
 
+function escAttr(v){ return String(v==null?"":v).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
 function addSvc(s){
   svcCount++;
   const i=svcCount;
@@ -479,7 +511,7 @@ function addSvc(s){
     </div>
   </div>
   <div class="svc-grid">
-    <div><label>Tên dịch vụ</label><input id="sn-${i}" placeholder="VD: Phòng Deluxe Sea View" value="${s?s.name:""}"></div>
+    <div><label>Tên dịch vụ</label><input id="sn-${i}" placeholder="VD: Phòng Deluxe Sea View" value="${s?escAttr(s.name):""}"></div>
     <div><label>Giá bán (đ)</label><input id="sp-${i}" inputmode="numeric" placeholder="0" value="${s?VNDn(s.price):""}" oninput="this.value=fmtInput(this.value);calcTotal()"></div>
     <div>
       <label>Cột 1</label>
@@ -491,31 +523,32 @@ function addSvc(s){
     <div style="padding-top:0">
       <label>Cột 2 <span style="font-size:10px;color:#A8BFCC">(tuỳ chọn)</span></label>
       <div class="svc-qty-row">
-        <input id="sc2-${i}" type="number" min="1" value="${s&&s.qty2!==undefined?s.qty2:""}" oninput="calcTotal()" placeholder="—">
+        <input id="sc2-${i}" type="number" min="1" value="${s&&s.qty2!=null?s.qty2:""}" oninput="calcTotal()" placeholder="—">
         <select id="su2-${i}">${u2opts}</select>
       </div>
     </div>
   </div>
   <div class="net-row">
     <div class="net-input-wrap">
-      <span class="net-lbl">💵 Giá net (đ) — tuỳ chọn</span>
-      <input id="snet-${i}" inputmode="numeric" placeholder="Để trống nếu chưa có" value="${s&&s.totalNet?VNDn(s.totalNet):""}" oninput="this.value=fmtInput(this.value);calcProfit(${i})" style="padding:7px 10px;font-size:12px;border:.5px solid rgba(58,125,153,.2);border-radius:7px;background:#fff;color:#2C3E50;font-family:inherit">
+      <span class="net-lbl">💵 Đơn giá net (đ) — tuỳ chọn</span>
+      <input id="snet-${i}" inputmode="numeric" placeholder="Để trống nếu chưa có" value="${s&&s.netPrice?VNDn(s.netPrice):""}" oninput="this.value=fmtInput(this.value);calcProfit(${i})" style="padding:7px 10px;font-size:12px;border:.5px solid rgba(58,125,153,.2);border-radius:7px;background:#fff;color:#2C3E50;font-family:inherit">
     </div>
     <div class="net-input-wrap" style="justify-content:flex-end">
       <span class="net-lbl">📊 Lợi nhuận dịch vụ</span>
       <div class="profit-bar" id="spro-${i}"></div>
     </div>
   </div>
+  <div id="snt-${i}" style="font-size:11px;color:#7A8FA0;margin:-2px 0 6px"></div>
   <div class="svc-sub" id="ss-${i}">Thành tiền: 0 đ</div>`;
   $("svc-container").appendChild(div);
+  if(s&&s.dateIn&&s.dateOut){ const dt1=parseDate6(s.dateIn), dt2=parseDate6(s.dateOut); if(dt1&&dt2&&diffDays(dt1,dt2)>0) updateNightsBadge(i,diffDays(dt1,dt2)); }
   calcTotal();
 }
 
 // Payment preview removed - now handled in detail view
 
-function createBooking(){
-  const name=$("kh-name").value.trim(), phone=$("kh-phone").value.trim();
-  if(!name||!phone){ toast("Nhập tên và SĐT!"); return; }
+let editingId = null;
+function readSvcs(){
   const svcs=[];
   document.querySelectorAll("[data-svc]").forEach(el=>{
     const i=el.dataset.svc;
@@ -528,19 +561,68 @@ function createBooking(){
     const u2=hasC2&&$("su2-"+i)?$("su2-"+i).value:"đêm";
     const dateIn=$("sd-"+i)?$("sd-"+i).value:"";
     const dateOut=$("se-"+i)?$("se-"+i).value:"";
-    const totalNetInput = parseNum($("snet-"+i)?$("snet-"+i).value:"");
+    const unitNet = parseNum($("snet-"+i)?$("snet-"+i).value:"");
     const units = hasC2?q1*q2:q1;
-    const netPrice = totalNetInput>0?Math.round(totalNetInput/units):null;
-    const sub=hasC2?p*q1*q2:p*q1;
-    if(nm&&p>0) svcs.push({name:nm,price:p,netPrice,totalNet:totalNetInput||null,qty1:q1,unit1:u1,qty2:q2,unit2:u2,dateIn,dateOut,total:sub});
+    const netPrice = unitNet>0?unitNet:null;
+    const totalNet = unitNet>0?unitNet*units:null;
+    const sub=p*units;
+    if(nm&&p>0) svcs.push({name:nm,price:p,netPrice,totalNet,qty1:q1,unit1:u1,qty2:q2,unit2:u2,dateIn,dateOut,total:sub});
   });
+  return svcs;
+}
+function resetForm(){
+  $("kh-name").value=""; $("kh-phone").value=""; $("kh-guests").value="";
+  $("svc-container").innerHTML=""; svcCount=0; addSvc();
+}
+function setEditMode(id){
+  editingId=id;
+  const on=!!id;
+  $("edit-banner").style.display=on?"flex":"none";
+  if(on) $("edit-banner-txt").textContent="Đang sửa đơn "+id;
+  $("btn-create").innerHTML=on?'<i class="ti ti-device-floppy"></i>Lưu thay đổi':'<i class="ti ti-file-check"></i>Tạo đơn hàng';
+}
+function editBooking(id){
+  const b=bookings.find(x=>x.id===id); if(!b) return;
+  resetForm();
+  $("svc-container").innerHTML=""; svcCount=0;
+  $("kh-name").value=b.name||""; $("kh-phone").value=b.phone||""; $("kh-guests").value=b.guests||"";
+  (b.svcs||[]).forEach(sv=>addSvc(sv));
+  if(!(b.svcs||[]).length) addSvc();
+  setEditMode(id);
+  switchTab("new");
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+function cancelEdit(){
+  setEditMode(null); resetForm(); calcTotal();
+}
+async function createBooking(){
+  const name=$("kh-name").value.trim(), phone=$("kh-phone").value.trim();
+  if(!name||!phone){ toast("Nhập tên và SĐT!"); return; }
+  const svcs=readSvcs();
   if(!svcs.length){ toast("Thêm ít nhất 1 dịch vụ có giá!"); return; }
   const totalAmt=svcs.reduce((a,s)=>a+s.total,0);
-  const bk={id:genId(),name,phone,guests:$("kh-guests").value.trim(),svcs,totalAmt,created:new Date().toLocaleDateString("vi-VN"),payments:[],status:"pending"};
-  bookings.push(bk); save();
+  const guests=$("kh-guests").value.trim();
+  if(editingId){
+    const b=bookings.find(x=>x.id===editingId);
+    if(!b){ toast("Không tìm thấy đơn để sửa"); setEditMode(null); return; }
+    b.name=name; b.phone=phone; b.guests=guests; b.svcs=svcs; b.totalAmt=totalAmt;
+    if(b.status!=="completed"){
+      const paid=b.payments.reduce((a,p)=>a+p.amount,0);
+      b.status=paid>=totalAmt?"done":paid>0?"partial":"pending";
+    }
+    const id=b.id;
+    await saveBooking(b);
+    toast("Đã lưu thay đổi "+id);
+    setEditMode(null); resetForm();
+    switchTab("list"); selId=id; renderList(); showDetail(id);
+    return;
+  }
+  const bk={id:genId(),name,phone,guests,svcs,totalAmt,created:new Date().toLocaleDateString("vi-VN"),payments:[],status:"pending"};
+  bookings.push(bk); updateCount();
+  const ok=await createRemote(bk);
+  if(!ok){ bookings=bookings.filter(x=>x!==bk); updateCount(); toast("Chưa tạo được đơn, dữ liệu trên form vẫn còn"); return; }
   toast("Đã tạo "+bk.id);
-  $("kh-name").value=""; $("kh-phone").value=""; $("kh-guests").value="";
-  $("svc-container").innerHTML=""; svcCount=0; calcTotal();
+  resetForm();
   switchTab("list"); selId=bk.id; renderList(); showDetail(bk.id);
 }
 
@@ -643,8 +725,8 @@ function showDetail(id){
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         <div><label style="font-size:11px;color:#7A8FA0;display:block;margin-bottom:3px">Giá bán: ${VND(s.total)}</label>
         <div style="font-size:12px;color:#7A8FA0">đơn giá ${VNDn(s.price)} đ</div></div>
-        <div><label style="font-size:11px;color:#7A8FA0;display:block;margin-bottom:3px">💵 Giá net (đ)</label>
-        <input id="edit-net-${id}-${si}" inputmode="numeric" placeholder="Chưa có" value="${s.netPrice?VNDn(s.netPrice*((s.qty2?s.qty1*s.qty2:s.qty1)||1)):""}"
+        <div><label style="font-size:11px;color:#7A8FA0;display:block;margin-bottom:3px">💵 Đơn giá net (đ) x ${(s.qty2?s.qty1*s.qty2:s.qty1)||1}</label>
+        <input id="edit-net-${id}-${si}" inputmode="numeric" placeholder="Chưa có" value="${s.netPrice?VNDn(s.netPrice):""}"
           oninput="this.value=fmtInput(this.value)"
           style="padding:7px 10px;font-size:12px;font-family:inherit;border:.5px solid rgba(58,125,153,.2);border-radius:7px;background:#fff;color:#2C3E50;width:100%"></div>
       </div>
@@ -668,7 +750,8 @@ function showDetail(id){
     <div style="font-size:11px;color:#7A8FA0;margin-top:6px">Copy ảnh để dán thẳng vào Zalo trên máy tính. Trên điện thoại, dùng Lưu ảnh.</div>
   </div>
 
-  <div class="act-row" style="grid-template-columns:1fr 1fr 1fr">
+  <div class="act-row">
+    <button class="btn-outline" onclick="editBooking('${id}')"><i class="ti ti-edit"></i>Sửa đơn</button>
     <button class="btn-outline" onclick="copyText('${id}')"><i class="ti ti-copy"></i>Copy Zalo</button>
     <button class="btn-calendar" onclick="addToCalendar('${id}')"><i class="ti ti-calendar-plus"></i>Calendar</button>
     <button class="btn-outline btn-danger" onclick="delBooking('${id}')"><i class="ti ti-trash"></i>Xóa</button>
@@ -695,14 +778,14 @@ function confirmPayment(id, type) {
   b.payments.push({amount:amt,type:label,date:today});
   const totalPaid=b.payments.reduce((a,p)=>a+p.amount,0);
   if(b.status!=="completed") b.status=totalPaid>=b.totalAmt?"done":totalPaid>0?"partial":"pending";
-  save(); toast("✅ Đã xác nhận nhận "+VND(amt));
+  saveBooking(b); toast("✅ Đã xác nhận nhận "+VND(amt));
   renderList(); showDetail(id);
 }
 
 function markComplete(id) {
   const b=bookings.find(x=>x.id===id); if(!b) return;
   b.status="completed";
-  save(); toast("✈️ Đơn đã hoàn thành!");
+  saveBooking(b); toast("✈️ Đơn đã hoàn thành!");
   renderList(); showDetail(id);
 }
 
@@ -711,17 +794,19 @@ function saveNetPrices(id) {
   b.svcs.forEach((s,si)=>{
     const el=document.getElementById("edit-net-"+id+"-"+si);
     if(!el) return;
-    const totalNet=parseNum(el.value)||0;
+    const unitNet=parseNum(el.value)||0;
     const units=(s.qty2?s.qty1*s.qty2:s.qty1)||1;
-    s.netPrice=totalNet>0?Math.round(totalNet/units):null;
-    s.totalNet=totalNet>0?totalNet:null;
+    s.netPrice=unitNet>0?unitNet:null;
+    s.totalNet=unitNet>0?unitNet*units:null;
   });
-  save();
+  saveBooking(b);
+  showDetail(id);
   // Show profit summary
   const totalSell=b.svcs.reduce((a,s)=>a+s.total,0);
   const totalNet=b.svcs.filter(s=>s.totalNet).reduce((a,s)=>a+(s.totalNet||0),0);
   const hasNet=b.svcs.some(s=>s.totalNet);
   const el=document.getElementById("profit-summary-"+id);
+  toast("Đã lưu giá net");
   if(el&&hasNet){
     const profit=totalSell-totalNet;
     el.innerHTML=`<div style="padding:10px 12px;background:${profit>=0?"#EDF7F2":"#FFE0E0"};border-radius:9px;font-size:13px;font-weight:600;color:${profit>=0?"#2E7D32":"#B85C5C"}">
@@ -913,7 +998,7 @@ function copyDH(id, si){
 // Qua ngày check out cuối cùng thì đơn tự chuyển "Đã hoàn thành"
 function autoComplete(){
   const today=new Date(); today.setHours(0,0,0,0);
-  let changed=false;
+  const changed=[];
   bookings.forEach(b=>{
     if(b.status==="completed") return;
     let last=null;
@@ -921,18 +1006,48 @@ function autoComplete(){
       const t=parseDate6(s.dateOut||s.dateIn||"");
       if(t&&(!last||t>last)) last=t;
     });
-    if(last&&last<today){ b.status="completed"; changed=true; }
+    if(last&&last<today){ b.status="completed"; changed.push(b); }
   });
   return changed;
 }
 
-function delBooking(id){
-  if(!confirm("Xóa đơn "+id+"?")) return;
+async function delBooking(id){
+  if(!confirm("Xóa đơn "+id+"? Không khôi phục được.")) return;
+  try{
+    await apiBooking("DELETE", undefined, "/api/booking/"+id);
+  }catch(e){
+    showSyncStatus("⚠️ Xóa chưa được: "+e.message, true); return;
+  }
   bookings=bookings.filter(b=>b.id!==id);
-  $("bk-count").textContent=bookings.length;
-  save();
+  updateCount();
+  if(editingId===id){ setEditMode(null); resetForm(); }
   selId=null; $("detail-wrap").innerHTML="";
   renderList(); toast("Đã xóa "+id);
+}
+
+function csvCell(v){
+  let t=v==null?"":String(v);
+  if(/^[=+\-@\t\r]/.test(t)) t="'"+t; // chặn công thức độc hại khi mở bằng Excel
+  return '"'+t.replace(/"/g,'""')+'"';
+}
+function downloadCSV(){
+  if(!bookings.length){ toast("Chưa có đơn nào"); return; }
+  const stLbl={pending:"Chờ cọc",partial:"Đã cọc",done:"Đã thanh toán",completed:"Đã hoàn thành"};
+  const head=["Mã đơn","Ngày tạo","Khách","SĐT","Trạng thái","Dịch vụ","Ngày đi","Ngày về","Số lượng","Đơn giá bán","Thành tiền","Đơn giá net","Tổng net","Tổng đơn","Đã thu","Còn lại"];
+  const rows=[head];
+  bookings.forEach(b=>{
+    const paid=b.payments.reduce((a,p)=>a+p.amount,0);
+    (b.svcs&&b.svcs.length?b.svcs:[{}]).forEach(s=>{
+      rows.push([b.id,b.created,b.name,b.phone,stLbl[b.status]||b.status,s.name||"",s.dateIn||"",s.dateOut||"",s.qty1?qtyText(s):"",s.price||"",s.total||"",s.netPrice||"",s.totalNet||"",b.totalAmt,paid,b.totalAmt-paid]);
+    });
+  });
+  const text="\ufeff"+rows.map(r=>r.map(csvCell).join(",")).join("\r\n");
+  const blob=new Blob([text],{type:"text/csv;charset=utf-8"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="serene-don-hang-"+new Date().toISOString().slice(0,10)+".csv";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),2000);
 }
 
 function renderStats(){
