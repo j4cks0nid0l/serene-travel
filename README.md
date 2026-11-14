@@ -86,3 +86,14 @@ Tài liệu nền tảng:
 
 Làm mới màn hình đăng nhập, bổ sung hiện/ẩn mật khẩu và sửa đường dẫn CSS/JS tương đối. File `../serene-travel-admin-preview.html` là bản duyệt độc lập, không cần mật khẩu, không gửi nội dung lên mạng. Mã mô phỏng chỉ nằm trong file xem thử ngoài thư mục public; trang quản trị triển khai vẫn yêu cầu đăng nhập qua API.
 Phiên bản website: V2.5
+
+## Quản lý booking (/admin/booking)
+
+Đơn hàng được lưu trong một cơ sở dữ liệu D1 riêng tên `serene-bookings`, tách hẳn khỏi nội dung website. Mỗi đơn là một dòng trong bảng `bookings` (xem `schema-bookings.sql`), nên sửa hoặc xóa đơn này không ảnh hưởng đơn khác.
+
+Cài đặt trên Cloudflare:
+1. Tạo D1 database `serene-bookings`, chạy nội dung `schema-bookings.sql` trong tab Console.
+2. Trong project Pages, mục Settings > Bindings, thêm D1 binding tên `BOOKINGS` trỏ tới database trên.
+3. Deploy lại. Nếu thiếu binding, trang booking báo lỗi 503 thay vì lưu sai chỗ.
+
+Biến `JSONBIN_KEY` và `JSONBIN_BIN_ID` không còn được dùng và có thể xóa. Trang booking có nút tải bảng đơn hàng dạng CSV (tab Thống kê) để mở bằng Excel hoặc Google Sheets.

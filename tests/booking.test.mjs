@@ -7,44 +7,48 @@ const pass='Only-for-local-tests-Change-This-123!';
 const hash='test-salt:'+pbkdf2Sync(pass,'test-salt',100000,32,'sha256').toString('hex');
 const origin='https://serene-test.pages.dev';
 const KEY='test-access-key-not-real';
-test('Booking API: needs login and CSRF, validates data, keeps the key on the server',async()=>{
- const env=await runtime({passwordHash:hash});env.JSONBIN_KEY=KEY;env.JSONBIN_BIN_ID='abcdef123456';
- let cookie='',csrf='';const calls=[];let stored={bookings:[{id:'ST26111401',name:'Khách thử'}]};
- const realFetch=globalThis.fetch;
- globalThis.fetch=async(url,init={})=>{calls.push({url:String(url),method:init.method||'GET',key:init.headers?.['X-Access-Key']});
-  if(String(url).startsWith('https://api.jsonbin.io/v3/b/abcdef123456')){if(init.method==='PUT'){stored=JSON.parse(init.body);return new Response('{}',{status:200})}return new Response(JSON.stringify({record:stored}),{status:200})}
-  throw Error('Unexpected outbound request: '+url)};
+const order=(id,extra={})=>({id,name:'Khách thử',phone:'0900000000',guests:'',svcs:[{name:'Phòng',price:1000000,qty1:1,unit1:'phòng',qty2:1,unit2:'đêm',total:1000000}],totalAmt:1000000,created:'14/11/2026',payments:[],status:'pending',...extra});
+test('Booking API (own database): login + CSRF, one row per order, no overwrite, validation',async()=>{
+ const env=await runtime({passwordHash:hash});
+ let cookie='',csrf='';
+ async function call(path,method='GET',body,options={}){const headers={origin,...(method==='GET'?{}:{'content-type':'application/json'}),...(cookie?{cookie}:{}),...(csrf?{'x-csrf-token':csrf}:{}),...options.headers};return worker.fetch(new Request(origin+'/api/'+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body)}),env)}
  try{
-  async function call(path,method='GET',body,options={}){const headers={origin,...(method==='GET'?{}:{'content-type':'application/json'}),...(cookie?{cookie}:{}),...(csrf?{'x-csrf-token':csrf}:{}),...options.headers};return worker.fetch(new Request(origin+'/api/'+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body)}),env)}
-  // Not logged in: no read, no write, and nothing leaves the server
+  // Not logged in: nothing readable or writable
   assert.equal((await call('booking')).status,401);
-  assert.equal((await call('booking','PUT',{bookings:[]})).status,401);
-  assert.equal(calls.length,0);
+  assert.equal((await call('booking','POST',{booking:order('ST26111401')})).status,401);
+  assert.equal((await call('booking/ST26111401','DELETE')).status,401);
   const login=await call('login','POST',{email:'serenetravelvn@gmail.com',password:pass});assert.equal(login.status,200);
   cookie=login.headers.get('set-cookie').split(';')[0];csrf=(await login.json()).csrf;
-  // Read
-  const got=await call('booking');assert.equal(got.status,200);const body=await got.text();assert.ok(!body.includes(KEY));assert.deepEqual(JSON.parse(body).bookings,stored.bookings);
-  assert.equal(calls.at(-1).key,KEY);
-  // Write needs the CSRF token
-  assert.equal((await call('booking','PUT',{bookings:[]},{headers:{'x-csrf-token':'bad'}})).status,403);
-  // Invalid data is refused before reaching the store
-  const before=calls.length;
-  assert.equal((await call('booking','PUT',{bookings:'nope'})).status,400);
-  assert.equal((await call('booking','PUT',{bookings:[1,2]})).status,400);
-  assert.equal((await call('booking','PUT',{})).status,400);
-  assert.equal(calls.length,before);
-  // Valid write
-  const next=[{id:'ST26111401',name:'Khách thử'},{id:'ST26111402',name:'Khách hai'}];
-  assert.equal((await call('booking','PUT',{bookings:next})).status,200);assert.deepEqual(stored.bookings,next);
-  // Unsupported method
-  assert.equal((await call('booking','DELETE',{})).status,405);
-  // Store failure is reported, not hidden
-  globalThis.fetch=async()=>new Response('{}',{status:500});
-  assert.equal((await call('booking')).status,502);
-  assert.equal((await call('booking','PUT',{bookings:next})).status,502);
-  // Missing settings fail closed
-  delete env.JSONBIN_KEY;assert.equal((await call('booking')).status,503);
- }finally{globalThis.fetch=realFetch;env.close()}
+  // Empty at first
+  assert.deepEqual((await (await call('booking')).json()).bookings,[]);
+  // CSRF is required to write
+  assert.equal((await call('booking','POST',{booking:order('ST26111401')},{headers:{'x-csrf-token':'bad'}})).status,403);
+  // Create two orders; order of creation is kept
+  assert.equal((await call('booking','POST',{booking:order('ST26111401')})).status,201);
+  assert.equal((await call('booking','POST',{booking:order('ST26111402',{name:'Khách hai'})})).status,201);
+  let list=(await (await call('booking')).json()).bookings;assert.deepEqual(list.map(x=>x.id),['ST26111401','ST26111402']);
+  // The same id can never overwrite an existing order
+  const dup=await call('booking','POST',{booking:order('ST26111401',{name:'Người khác'})});assert.equal(dup.status,409);
+  assert.equal((await (await call('booking')).json()).bookings[0].name,'Khách thử');
+  // Update one order only
+  assert.equal((await call('booking/ST26111402','PUT',{booking:order('ST26111402',{name:'Khách hai (sửa)',status:'partial'})})).status,200);
+  list=(await (await call('booking')).json()).bookings;assert.equal(list[1].name,'Khách hai (sửa)');assert.equal(list[0].name,'Khách thử');
+  // Update of a missing order, or id that does not match the URL
+  assert.equal((await call('booking/ST26111499','PUT',{booking:order('ST26111499')})).status,404);
+  assert.equal((await call('booking/ST26111401','PUT',{booking:order('ST26111402')})).status,400);
+  // Invalid data is refused
+  for(const bad of [undefined,'x',[],{...order('ST26111403'),id:'abc'},{...order('ST26111403'),svcs:'no'},{...order('ST26111403'),totalAmt:'1'},{...order('ST26111403'),payments:[{amount:'x'}]},{...order('ST26111403'),name:'a'.repeat(300)}])assert.equal((await call('booking','POST',{booking:bad})).status,400);
+  assert.equal((await call('booking/not-an-id','DELETE')).status,404);
+  // Delete
+  assert.equal((await call('booking/ST26111401','DELETE')).status,200);
+  assert.deepEqual((await (await call('booking')).json()).bookings.map(x=>x.id),['ST26111402']);
+  // Booking data lives in its own database, not in website content
+  assert.equal((await (await call('public')).json()).items.length>=0,true);
+  assert.equal((await env.DB.prepare("SELECT name FROM sqlite_master WHERE name='bookings'").first()),null);
+  // Not connected: fail closed
+  const bare={...env};delete bare.BOOKINGS;
+  assert.equal((await worker.fetch(new Request(origin+'/api/booking',{headers:{origin,cookie}}),bare)).status,503);
+ }finally{env.close()}
 });
 test('Booking page gets the extra CSP; the rest of /admin and the site keep the strict one',async()=>{
  const env=await runtime({passwordHash:hash});env.ASSETS={fetch:async()=>new Response('ok',{headers:{'content-type':'text/html'}})};
