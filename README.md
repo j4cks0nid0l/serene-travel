@@ -101,3 +101,19 @@ Biến `JSONBIN_KEY` và `JSONBIN_BIN_ID` không còn được dùng và có th�
 Đơn vị tự thêm (ví dụ "suất", "bàn") lưu trong bảng `booking_units` của cùng database, nên dùng được ở mọi máy. Nếu database tạo từ trước, chạy thêm lệnh `CREATE TABLE IF NOT EXISTS booking_units (name TEXT PRIMARY KEY, created TEXT NOT NULL);` trong Console của D1.
 
 Tab Thiết lập của trang booking: quản lý đơn vị tự thêm, ghi chú cuối phiếu A5 (lưu trong bảng `booking_settings`) và tải CSV. Nếu database tạo từ trước, chạy thêm: `CREATE TABLE IF NOT EXISTS booking_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);`
+
+## Quản lý bài đăng (/admin/bai-dang), giai đoạn 1
+
+Sau khi đăng nhập ở `/admin/`, màn hình đầu có ba khu: Quản lý web, Booking, Bài đăng. Nút "Chọn khu" ở đầu trang đưa về màn hình này. Địa chỉ `/admin/#web` mở thẳng khu Quản lý web.
+
+Trang Bài đăng dùng chung tài khoản đăng nhập của trang quản trị. Dữ liệu nằm trong database `serene-content` (binding `DB`), hai bảng `posts` và `style_samples` định nghĩa trong `schema-posts.sql`. Không cần binding hay Secret mới.
+
+Cài đặt trên Cloudflare:
+1. Mở D1 database `serene-content`, tab Console, dán nội dung `schema-posts.sql` rồi chạy.
+2. Deploy lại. Nếu chưa chạy bước 1, trang Bài đăng báo lỗi 503 và nêu rõ tên file cần chạy.
+
+Giai đoạn 1 làm được: danh sách bài theo trạng thái (Chờ duyệt, Đã hẹn giờ, Đã đăng, Lỗi), thêm bài, sửa chữ, gắn ảnh (tự thu nhỏ khi lớn hơn 1,5 MB, lưu qua R2), hẹn giờ bằng cách bấm giờ trong hộp chọn (giờ phải cách hiện tại ít nhất 45 phút), bỏ hẹn giờ, đánh dấu đã đăng, sao chép nội dung. Giờ đăng lưu theo giờ Việt Nam (UTC+7), dạng `YYYY-MM-DD HH:mm`.
+
+Khi bài do Claude viết được gửi vào (trường `from_claude`), bản gốc được giữ lại. Mỗi lần Jackson sửa bài, hoặc duyệt không sửa, hệ thống lưu một dòng trong `style_samples` để Claude học phong cách. Bài tự thêm bằng tay không tạo mẫu.
+
+Chưa làm ở giai đoạn này: tự đăng lên Facebook (nối với Make), Claude đọc và ghi bài qua mã riêng, viết bài từ ảnh. Bài "Đã hẹn giờ" hiện chỉ được lưu lịch.
