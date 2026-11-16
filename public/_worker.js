@@ -17,6 +17,61 @@ function escape(s){return s.replaceAll('&','&amp;').replaceAll('"','&quot;').rep
 export function sanitize(input){return String(input||'').replace(/<!--[\s\S]*?-->/g,'').replace(/<(script|style|iframe|object|svg|math)\b[^>]*>[\s\S]*?<\/\1\s*>/gi,'').replace(/<\/?([a-z0-9]+)\b([^>]*)>/gi,(all,name,attrs)=>{name=name.toLowerCase();if(name==='div')name='p';if(!tags.has(name))return '';if(all.startsWith('</'))return ['br','img'].includes(name)?'':'</'+name+'>';if(name==='a'){const href=/\bhref\s*=\s*["']([^"']*)["']/i.exec(attrs)?.[1]||'';let url;try{url=new URL(href)}catch{return '<a>'}return ['https:','http:'].includes(url.protocol)?'<a href="'+escape(url.href)+'" target="_blank" rel="noopener noreferrer">':'<a>'}if(name==='img'){const src=/\bsrc\s*=\s*["']([^"']*)["']/i.exec(attrs)?.[1]||'';const alt=/\balt\s*=\s*["']([^"']*)["']/i.exec(attrs)?.[1]||'Ảnh minh họa';return validImage(src)?'<img src="'+escape(src)+'" alt="'+escape(alt)+'">':''}const style=/\bstyle\s*=\s*["']([^"']*)["']/i.exec(attrs)?.[1]||'';const cls=/\bclass\s*=\s*["']([^"']*)["']/i.exec(attrs)?.[1]||'';const alignment=/(?:^|;)\s*text-align\s*:\s*(left|center|right|justify)\s*(?:;|$)/i.exec(style)?.[1]?.toLowerCase()||/^align-(left|center|right|justify)$/.exec(cls)?.[1];return '<'+name+(['p','h2','h3','li','blockquote'].includes(name)&&alignment?' class="align-'+alignment+'"':'')+'>'})}
 function validate(value,id){if(!value||typeof value!=='object'||Array.isArray(value))throw Error('Nội dung không hợp lệ.');const p={};if(id==='settings'){const keys=['heroTitle','heroSubtitle','heroImage','aboutTitle','aboutBody','founderName','founderImage','phone','email','company','address','hours','zalo','cardVinpearl','cardHotel','cardTour','cardTicket'];for(const k of [...keys,...Object.keys(value).filter(k=>/^home[A-Z][A-Za-z0-9]{0,60}$/.test(k))]){if(value[k]!==undefined){if(typeof value[k]!=='string'||value[k].length>12000)throw Error('Trường nội dung quá dài.');p[k]=value[k]}}for(const k of ['heroImage','founderImage','cardVinpearl','cardHotel','cardTour','cardTicket'])if(p[k]&&!validImage(p[k]))throw Error('Ảnh không hợp lệ.');if(p.phone&&!/^\+?[0-9\s-]{8,20}$/.test(p.phone))throw Error('Số điện thoại không hợp lệ.');if(p.zalo&&!/^https:\/\/zalo\.me\/[0-9]+$/.test(p.zalo))throw Error('Liên kết Zalo không hợp lệ.');return p}for(const k of ['title','summary','category','author','body','cover']){if(value[k]!==undefined&&typeof value[k]!=='string')throw Error('Nội dung không hợp lệ.');p[k]=value[k]||''}if(!p.title.trim()||p.title.length>180||p.summary.length>1000||p.body.length>150000||p.author.length>150||p.category.length>150)throw Error('Kiểm tra tiêu đề và độ dài bài viết.');if(p.cover&&!validImage(p.cover))throw Error('Ảnh không hợp lệ.');p.body=sanitize(p.body);return p}
 function validateBooking(b,expected){if(!b||typeof b!=='object'||Array.isArray(b))throw Error('Dữ liệu đơn hàng không hợp lệ.');if(typeof b.id!=='string'||!/^ST[0-9]{1,12}$/.test(b.id)||(expected&&b.id!==expected))throw Error('Mã đơn không hợp lệ.');if(typeof b.name!=='string'||b.name.length>200||typeof b.phone!=='string'||b.phone.length>60)throw Error('Tên hoặc số điện thoại không hợp lệ.');if(!Array.isArray(b.svcs)||b.svcs.length>60||!b.svcs.every(x=>x&&typeof x==='object'&&!Array.isArray(x)))throw Error('Danh sách dịch vụ không hợp lệ.');if(!Array.isArray(b.payments)||b.payments.length>200||!b.payments.every(x=>x&&typeof x==='object'&&Number.isFinite(x.amount)))throw Error('Danh sách thanh toán không hợp lệ.');if(!Number.isFinite(b.totalAmt)||b.totalAmt<0)throw Error('Tổng tiền không hợp lệ.');if(JSON.stringify(b).length>150000)throw Error('Dữ liệu đơn quá lớn.');return b}
+// ---- Bài đăng Facebook/Threads (lịch đăng, sửa bài, mẫu phong cách) ----
+const POST_PLATFORMS=['FACEBOOK','THREADS'],POST_LEAD_MS=45*60000;
+const postClock=ms=>new Date(ms+7*3600000).toISOString().slice(0,16).replace('T',' ');
+const postEpoch=s=>Date.parse(s.replace(' ','T')+':00+07:00');
+function validPostTime(s){if(typeof s!=='string'||!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(s))return false;const ms=postEpoch(s);return Number.isFinite(ms)&&postClock(ms)===s}
+function cleanPostFields(data,partial){
+ if(!data||typeof data!=='object'||Array.isArray(data))throw Error('Dữ liệu bài đăng không hợp lệ.');
+ const out={},text=(k,max)=>{if(data[k]===undefined)return;if(typeof data[k]!=='string'||data[k].length>max)throw Error('Trường "'+k+'" không hợp lệ hoặc quá dài.');out[k]=data[k]};
+ if(data.platform!==undefined){if(!POST_PLATFORMS.includes(data.platform))throw Error('Nền tảng không hợp lệ.');out.platform=data.platform}else if(!partial)throw Error('Thiếu nền tảng.');
+ text('body',8000);text('source',200);text('stt',20);text('note',500);text('image',200);text('post_url',500);text('error',2000);
+ if(out.image&&!/^\/media\/[a-zA-Z0-9._-]+$/.test(out.image))throw Error('Ảnh không hợp lệ.');
+ if(data.scheduled_at!==undefined){if(data.scheduled_at!==''&&!validPostTime(data.scheduled_at))throw Error('Giờ đăng không hợp lệ.');out.scheduled_at=data.scheduled_at}
+ return out}
+function postRow(r){return {id:r.id,platform:r.platform,kind:r.kind,body:r.body,image:r.image,source:r.source,stt:r.stt,scheduled_at:r.scheduled_at,status:r.status,post_url:r.post_url,error:r.error,note:r.note,has_original:r.original_body!==null&&r.original_body!==undefined,posted_at:r.posted_at,created:r.created,updated:r.updated}}
+async function saveStyleSample(env,row,body,note){
+ if(row.original_body===null||row.original_body===undefined)return;
+ const now=new Date().toISOString(),day=postClock(Date.now()).slice(0,10);
+ if(body.trim()===row.original_body.trim()){
+  if(note==='OK nguyên bản')await env.DB.prepare('INSERT INTO style_samples(post_id,day,platform,source,original,edited,note,updated) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(post_id) DO NOTHING').bind(row.id,day,row.platform,row.source,row.original_body,body,note,now).run();
+  else await env.DB.prepare('DELETE FROM style_samples WHERE post_id=? AND note<>?').bind(row.id,'OK nguyên bản').run();
+  return}
+ await env.DB.prepare('INSERT INTO style_samples(post_id,day,platform,source,original,edited,note,updated) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(post_id) DO UPDATE SET edited=excluded.edited,source=excluded.source,day=excluded.day,note=excluded.note,updated=excluded.updated').bind(row.id,day,row.platform,row.source,row.original_body,body,'',now).run()}
+async function postsApi(req,env,path){
+ const m=/^\/api\/posts(?:\/(P[a-z0-9]{6,30}))?$/.exec(path);if(!m)return json({error:'Không tìm thấy.'},404);const id=m[1];
+ try{
+  if(!id&&req.method==='GET'){const {results}=await env.DB.prepare('SELECT * FROM posts ORDER BY updated DESC LIMIT 400').all();return json({now:postClock(Date.now()),posts:results.map(postRow)})}
+  if(Number(req.headers.get('content-length')||0)>60000)return json({error:'Dữ liệu quá lớn.'},413);
+  if(!id&&req.method==='POST'){
+   let input,f;try{input=await req.json();f=cleanPostFields(input?.data,false)}catch(e){return json({error:e.message||'Nội dung không hợp lệ.'},400)}
+   const nid='P'+Date.now().toString(36)+crypto.randomUUID().replaceAll('-','').slice(0,6),now=new Date().toISOString(),body=f.body||'',image=f.image||'';
+   await env.DB.prepare('INSERT INTO posts(id,platform,kind,body,original_body,image,source,stt,scheduled_at,status,post_url,error,note,posted_at,created,updated) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(nid,f.platform,image?'CÓ ẢNH':'CHỮ THUẦN',body,input.from_claude===true?body:null,image,f.source||'',f.stt||'',f.scheduled_at||'','NHÁP','','',f.note||'',null,now,now).run();
+   return json({id:nid},201)}
+  if(!id)return json({error:'Không hỗ trợ.'},405);
+  const row=await env.DB.prepare('SELECT * FROM posts WHERE id=?').bind(id).first();if(!row)return json({error:'Không tìm thấy bài.'},404);
+  if(req.method==='DELETE'){if(row.status==='ĐÃ DUYỆT')return json({error:'Hãy bỏ hẹn giờ trước khi xóa bài.'},409);await env.DB.prepare('DELETE FROM posts WHERE id=?').bind(id).run();return json({ok:true})}
+  if(req.method!=='PUT')return json({error:'Không hỗ trợ.'},405);
+  let input,f;try{input=await req.json();f=cleanPostFields(input?.data||{},true)}catch(e){return json({error:e.message||'Nội dung không hợp lệ.'},400)}
+  const action=input.action||'save';if(!['save','approve','unapprove','posted'].includes(action))return json({error:'Thao tác không hợp lệ.'},400);
+  if(row.status==='ĐÃ ĐĂNG')return json({error:'Bài đã đăng, không sửa được.'},409);
+  const next={...row,...f},contentChanged=['body','image','scheduled_at','platform'].some(k=>f[k]!==undefined&&f[k]!==row[k]);
+  if(row.status==='ĐÃ DUYỆT'&&action!=='unapprove'&&action!=='posted'&&contentChanged)return json({error:'Bài đang hẹn giờ. Hãy bỏ hẹn giờ trước khi sửa.'},409);
+  next.kind=next.image?'CÓ ẢNH':'CHỮ THUẦN';let status=row.status,posted=row.posted_at;
+  if(action==='approve'){
+   if(!next.body.trim())return json({error:'Bài chưa có nội dung.'},400);
+   if(next.kind==='CÓ ẢNH'&&!next.image)return json({error:'Bài cần có ảnh.'},400);
+   if(!validPostTime(next.scheduled_at))return json({error:'Hãy chọn giờ đăng.'},400);
+   if(postEpoch(next.scheduled_at)<Date.now()+POST_LEAD_MS)return json({error:'Giờ đăng phải cách hiện tại ít nhất 45 phút.'},400);
+   status='ĐÃ DUYỆT';next.error=''}
+  else if(action==='unapprove'){if(!['ĐÃ DUYỆT','LỖI'].includes(row.status))return json({error:'Bài chưa được hẹn giờ.'},409);status='NHÁP';next.error=''}
+  else if(action==='posted'){status='ĐÃ ĐĂNG';posted=new Date().toISOString()}
+  if(f.body!==undefined&&f.body!==row.body)await saveStyleSample(env,row,next.body,'');
+  if(action==='approve'||action==='posted')await saveStyleSample(env,row,next.body,'OK nguyên bản');
+  await env.DB.prepare('UPDATE posts SET platform=?,kind=?,body=?,image=?,source=?,stt=?,scheduled_at=?,status=?,post_url=?,error=?,note=?,posted_at=?,updated=? WHERE id=?').bind(next.platform,next.kind,next.body,next.image,next.source,next.stt,next.scheduled_at,status,next.post_url,next.error,next.note,posted,new Date().toISOString(),id).run();
+  return json({ok:true,status})
+ }catch(e){if(/no such table/i.test(e.message||''))return json({error:'Chưa tạo bảng bài đăng. Chạy file schema-posts.sql trong Console của D1.'},503);throw e}}
 export default {async fetch(req,env){try{return await handle(req,env)}catch(err){console.error('Request failed:',err.message);return json({error:'Chưa xử lý được yêu cầu. Vui lòng thử lại.'},500)}}};
 async function handle(req,env){const u=new URL(req.url),path=u.pathname;
 if(path.startsWith('/media/')){if(req.method!=='GET')return json({error:'Không hỗ trợ.'},405);const key=path.slice(7);if(!/^[a-zA-Z0-9._-]+$/.test(key))return new Response('Not found',{status:404});if(!env.MEDIA)return new Response('Not configured',{status:503});const o=await env.MEDIA.get(key);if(!o)return new Response('Not found',{status:404});return new Response(o.body,{headers:{'content-type':o.httpMetadata?.contentType||'application/octet-stream','cache-control':'public,max-age=31536000,immutable','x-content-type-options':'nosniff'}})}
@@ -79,6 +134,7 @@ if(path==='/api/booking-settings'){
  }catch{return json({error:'Chưa có bảng thiết lập. Cần chạy thêm lệnh tạo bảng trong D1.'},503)}
  return json({error:'Không hỗ trợ.'},405)
 }
+if(path==='/api/posts'||path.startsWith('/api/posts/'))return postsApi(req,env,path);
 if(path==='/api/booking'||path.startsWith('/api/booking/')){
  // Đơn hàng nằm trong database riêng (binding BOOKINGS), tách hẳn khỏi nội dung website.
  if(!env.BOOKINGS)return json({error:'Chưa kết nối kho đơn hàng.'},503);

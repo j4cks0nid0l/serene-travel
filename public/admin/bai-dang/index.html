@@ -1,0 +1,12 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Bài đăng | Serene Travel</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Playfair+Display:wght@500;600&display=swap"><link rel="stylesheet" href="../admin.css"><link rel="stylesheet" href="./bai-dang.css"></head><body>
+<header><a href="/admin/" class="brand"><img src="/assets/8436733ede1296a71ad7.jpg" alt=""><span>Serene Travel</span></a><span class="header-note">Quản lý bài đăng</span><a class="nav-link first" href="/admin/">Chọn khu</a><a class="nav-link" href="/admin/booking/">Booking</a><button id="logout" type="button">Đăng xuất</button></header>
+<main>
+<div class="posts-top"><h1>Bài đăng</h1><div class="posts-add"><button id="add-facebook" class="primary" type="button">+ Bài Facebook</button><button id="add-threads" type="button">+ Bài Threads</button></div></div>
+<p class="notice">Giai đoạn 1: trang này lưu bài, giờ hẹn và trạng thái duyệt. Bài "Đã hẹn giờ" chưa tự đăng lên Facebook cho tới khi nối với Make ở giai đoạn sau.</p>
+<p id="status" role="status" aria-live="polite"></p>
+<div class="tabs" id="tabs" role="tablist" aria-label="Lọc bài"></div>
+<div id="list" class="post-list"></div>
+</main>
+<dialog id="schedule-dialog"><form method="dialog" class="schedule"><h2>Hẹn giờ đăng</h2><label for="schedule-date">Ngày đăng<input id="schedule-date" type="date"></label><div class="chips-label">Bấm vào giờ để hẹn</div><div id="chips" class="chips"></div><label for="schedule-custom">Hoặc nhập giờ khác<input id="schedule-custom" type="time"></label><div class="schedule-actions"><button id="schedule-custom-ok" type="button" class="primary">Hẹn giờ này</button><button id="schedule-cancel" type="button">Đóng</button></div><p id="schedule-note">Giờ đăng phải cách hiện tại ít nhất 45 phút.</p></form></dialog>
+<script type="module" src="./bai-dang.js"></script>
+</body></html>
