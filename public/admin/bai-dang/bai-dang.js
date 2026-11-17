@@ -1,4 +1,5 @@
 const $=id=>document.getElementById(id);
+const MAX_IMAGES=10;
 let csrf='',posts=[],nowText='',filter='',target=null;
 const drafts=new Map();
 const TABS=[['NHÁP','Chờ duyệt'],['ĐÃ DUYỆT','Đã hẹn giờ'],['ĐÃ ĐĂNG','Đã đăng'],['LỖI','Lỗi'],['ALL','Tất cả']];
@@ -53,13 +54,31 @@ function card(p){
  const remember=()=>{const next={body:ta.value,source:src.value,note:note.value};if(next.body===p.body&&next.source===p.source&&next.note===p.note)drafts.delete(p.id);else drafts.set(p.id,next)};
  for(const f of [ta,src,note])f.addEventListener('input',()=>{remember();updateCount()});
  if(p.platform==='FACEBOOK'){
-  const wrap=el('div','post-image');
-  if(p.image){const img=el('img');img.alt='Ảnh bài đăng';img.src=p.image;wrap.append(img)}else wrap.append(el('div','noimg','Chưa có ảnh'));
+  const list=p.image?p.image.split('\n'):[];
+  const wrap=el('div','post-images');
+  const saveImages=(urls,msg)=>api('posts/'+p.id,'PUT',{data:{...edits(p),image:urls.join('\n')}}).then(async()=>{drafts.delete(p.id);await load();show(msg)});
+  list.forEach((url,i)=>{
+   const cell=el('div','pthumb');const img=el('img');img.alt='Ảnh '+(i+1);img.src=url;cell.append(img);
+   if(i===0)cell.append(el('span','main-tag','Ảnh chính'));
+   if(editable){
+    const bar=el('div','pthumb-bar');
+    if(i>0)bar.append(button('◀','',function(){run([this],()=>{const next=[...list];[next[i-1],next[i]]=[next[i],next[i-1]];return saveImages(next,'Đã đổi thứ tự ảnh.')})}));
+    bar.append(button('Bỏ','',function(){run([this],()=>saveImages(list.filter((_,k)=>k!==i),'Đã bỏ ảnh.'))}));
+    cell.append(bar)}
+   wrap.append(cell)});
+  if(!list.length)wrap.append(el('div','noimg','Chưa có ảnh'));
   if(editable){
-   const side=el('div');const file=el('input');file.type='file';file.accept='image/jpeg,image/png,image/webp';file.hidden=true;
-   const pick=button(p.image?'Đổi ảnh':'Chọn ảnh','',()=>file.click());side.append(pick);
-   if(p.image)side.append(button('Bỏ ảnh','',()=>run([pick],async()=>{await api('posts/'+p.id,'PUT',{data:{...edits(p),image:''}});drafts.delete(p.id);await load();show('Đã bỏ ảnh.')})));
-   file.onchange=()=>{const f=file.files[0];file.value='';if(f)run([pick],async()=>{show('Đang tải ảnh…');const blob=await prepareImage(f);const up=await api('upload','POST',blob);await api('posts/'+p.id,'PUT',{data:{...edits(p),image:up.url}});drafts.delete(p.id);await load();show('Đã gắn ảnh.')})};
+   const side=el('div','img-side');const file=el('input');file.type='file';file.multiple=true;file.accept='image/jpeg,image/png,image/webp';file.hidden=true;
+   const pick=button(list.length?'Thêm ảnh':'Chọn ảnh','',()=>file.click());side.append(pick);
+   side.append(el('p','hint','Hoặc bấm vào ô nội dung rồi Ctrl+V để dán ảnh. Tối đa '+MAX_IMAGES+' ảnh.'));
+   const addFiles=files=>run([pick],async()=>{
+    const imgs=[...files].filter(f=>f.type.startsWith('image/'));if(!imgs.length)return;
+    const room=MAX_IMAGES-list.length;if(room<=0){show('Mỗi bài tối đa '+MAX_IMAGES+' ảnh.');return}
+    const urls=[...list];let done=0,skipped=imgs.length>room?imgs.length-room:0;
+    try{for(const f of imgs.slice(0,room)){show('Đang tải ảnh '+(done+1)+'/'+Math.min(imgs.length,room)+'…');const up=await api('upload','POST',await prepareImage(f));urls.push(up.url);done++}}
+    finally{if(done)await saveImages(urls,'Đã thêm '+done+' ảnh'+(skipped?', bỏ '+skipped+' ảnh vì quá '+MAX_IMAGES+' ảnh':'')+'.')}});
+   file.onchange=()=>{const f=[...file.files];file.value='';if(f.length)addFiles(f)};
+   ta.addEventListener('paste',e=>{const files=[...(e.clipboardData?.files||[])].filter(f=>f.type.startsWith('image/'));if(!files.length)return;e.preventDefault();addFiles(files)});
    side.append(file);wrap.append(side)}
   box.append(wrap)}
  const actions=el('div','actions');

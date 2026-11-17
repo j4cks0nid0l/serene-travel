@@ -52,6 +52,13 @@ test('Posts API: login required, create, edit, schedule rules, style samples',as
   // Posts that need a photo must have one
   assert.equal((await call('posts/'+id,'PUT',{data:{image:'/media/abc.jpg'}})).status,200);
   assert.equal((await (await call('posts')).json()).posts[0].kind,'CÓ ẢNH');
+  // Several photos: kept in order, max 10, no duplicates, only /media paths
+  const ten=Array.from({length:10},(_,i)=>'/media/p'+i+'.jpg');
+  assert.equal((await call('posts/'+id,'PUT',{data:{image:ten.join('\n')}})).status,200);
+  assert.equal((await (await call('posts')).json()).posts[0].image,ten.join('\n'));
+  assert.equal((await call('posts/'+id,'PUT',{data:{image:[...ten,'/media/p10.jpg'].join('\n')}})).status,400);
+  assert.equal((await call('posts/'+id,'PUT',{data:{image:'/media/a.jpg\n/media/a.jpg'}})).status,400);
+  assert.equal((await call('posts/'+id,'PUT',{data:{image:'/media/a.jpg\nhttps://evil.test/x.jpg'}})).status,400);
   assert.equal((await call('posts/'+id,'PUT',{data:{image:''}})).status,200);
   assert.equal((await (await call('posts')).json()).posts[0].kind,'CHỮ THUẦN');
   // Posted posts are final
