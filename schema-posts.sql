@@ -32,3 +32,12 @@ CREATE TABLE IF NOT EXISTS style_samples (
   note TEXT NOT NULL DEFAULT '',
   updated TEXT NOT NULL
 );
+
+-- Khóa riêng cho máy (Claude, Make). Chỉ lưu bản băm SHA-256 của khóa, không lưu khóa.
+-- scope: 'claude' (tạo bài nháp, tải ảnh, đọc mẫu văn phong) hoặc 'make' (đọc bài đến giờ, báo kết quả).
+CREATE TABLE IF NOT EXISTS machine_tokens (
+  name TEXT PRIMARY KEY,
+  scope TEXT NOT NULL,
+  hash TEXT NOT NULL UNIQUE,
+  created TEXT NOT NULL
+);

@@ -39,7 +39,7 @@ function card(p){
  const box=el('article','post');box.dataset.id=p.id;
  const head=el('div','post-head');
  head.append(el('span','pill'+(p.platform==='THREADS'?' threads':''),p.platform==='THREADS'?'Threads':'Facebook'));
- const [label,cls]=STATUS_PILL[p.status]||[p.status,''];head.append(el('span','pill '+cls,label));
+ let [label,cls]=STATUS_PILL[p.status]||[p.status,''];if(p.status==='ĐÃ ĐĂNG'&&p.scheduled_at&&p.scheduled_at>nowText)label='Đã đặt lịch trên Facebook';head.append(el('span','pill '+cls,label));
  if(p.kind==='CÓ ẢNH')head.append(el('span','pill','Có ảnh'));
  if(p.scheduled_at)head.append(el('span','post-time',fmt(p.scheduled_at)));
  box.append(head);
