@@ -73,11 +73,46 @@ async function postsApi(req,env,path){
   return json({ok:true,status})
  }catch(e){if(/no such table/i.test(e.message||''))return json({error:'Chưa tạo bảng bài đăng. Chạy file schema-posts.sql trong Console của D1.'},503);throw e}}
 export default {async fetch(req,env){try{return await handle(req,env)}catch(err){console.error('Request failed:',err.message);return json({error:'Chưa xử lý được yêu cầu. Vui lòng thử lại.'},500)}}};
+async function uploadImage(req,env){if(!env.MEDIA)return json({error:'Chưa kết nối kho ảnh.'},503);const type=req.headers.get('content-type')||'',extensions={'image/jpeg':'jpg','image/png':'png','image/webp':'webp'};if(!extensions[type])return json({error:'Chỉ nhận JPG, PNG hoặc WebP.'},400);if(Number(req.headers.get('content-length')||0)>5*1024*1024)return json({error:'Ảnh tối đa 5 MB.'},413);const bytes=await req.arrayBuffer();if(bytes.byteLength>5*1024*1024)return json({error:'Ảnh tối đa 5 MB.'},413);const b=new Uint8Array(bytes);const signature=type==='image/jpeg'?b[0]===255&&b[1]===216&&b[2]===255:type==='image/png'?hex(bytes.slice(0,8))==='89504e470d0a1a0a':String.fromCharCode(...b.slice(0,4))==='RIFF'&&String.fromCharCode(...b.slice(8,12))==='WEBP';if(!signature)return json({error:'Tệp không phải ảnh hợp lệ.'},400);const key=crypto.randomUUID()+'.'+extensions[type];await env.MEDIA.put(key,bytes,{httpMetadata:{contentType:type}});return json({url:'/media/'+key})}
+// ---- API cho máy (Claude, Make): khóa riêng dạng Bearer, chỉ lưu bản băm trong bảng machine_tokens ----
+async function machineScope(req,env){
+ const m=/^Bearer ([A-Za-z0-9_-]{40,80})$/.exec(req.headers.get('authorization')||'');if(!m)return null;
+ try{const row=await env.DB.prepare('SELECT scope FROM machine_tokens WHERE hash=?').bind(await sha(m[1])).first();return row?.scope||null}catch{return null}}
+async function machineApi(req,env,path,u){
+ const scope=await machineScope(req,env);if(!scope)return json({error:'Khóa không hợp lệ.'},401);
+ try{
+  if(scope==='claude'){
+   if(path==='/api/machine/upload'&&req.method==='POST')return uploadImage(req,env);
+   if(path==='/api/machine/style'&&req.method==='GET'){const {results}=await env.DB.prepare('SELECT day,platform,source,original,edited,note FROM style_samples ORDER BY updated DESC LIMIT 20').all();return json({samples:results})}
+   if(path==='/api/machine/posts'&&req.method==='GET'){const {results}=await env.DB.prepare('SELECT id,platform,kind,source,stt,status,scheduled_at,created FROM posts ORDER BY created DESC LIMIT 200').all();return json({now:postClock(Date.now()),posts:results})}
+   if(path==='/api/machine/posts'&&req.method==='POST'){
+    if(Number(req.headers.get('content-length')||0)>60000)return json({error:'Dữ liệu quá lớn.'},413);
+    let input;try{input=await req.json()}catch{return json({error:'Nội dung không hợp lệ.'},400)}
+    const d=input&&typeof input==='object'&&!Array.isArray(input)?input:{},data={};
+    for(const k of ['platform','body','source','stt','note','image'])if(d[k]!==undefined)data[k]=Array.isArray(d[k])?d[k].join('\n'):d[k];
+    return postsApi(new Request(u.origin+'/api/posts',{method:'POST',body:JSON.stringify({data,from_claude:true})}),env,'/api/posts')}}
+  if(scope==='make'){
+   if(path==='/api/machine/due'&&req.method==='GET'){
+    const {results}=await env.DB.prepare("SELECT * FROM posts WHERE status='ĐÃ DUYỆT' AND platform='FACEBOOK' ORDER BY scheduled_at LIMIT 50").all();
+    return json({now:postClock(Date.now()),posts:results.map(r=>({id:r.id,scheduled_at:r.scheduled_at,scheduled_at_iso:new Date(postEpoch(r.scheduled_at)).toISOString(),kind:r.kind,body:r.body,images:(r.image?r.image.split('\n'):[]).map(x=>u.origin+x)}))})}
+    const m=/^\/api\/machine\/result\/(P[a-z0-9]{6,30})$/.exec(path);
+    if(m&&req.method==='POST'){
+     let input;try{input=await req.json()}catch{return json({error:'Nội dung không hợp lệ.'},400)}
+     const row=await env.DB.prepare('SELECT status FROM posts WHERE id=?').bind(m[1]).first();if(!row)return json({error:'Không tìm thấy bài.'},404);
+     if(row.status==='ĐÃ ĐĂNG')return json({ok:true,already:true});
+     if(row.status!=='ĐÃ DUYỆT')return json({error:'Bài không ở trạng thái đã hẹn giờ.'},409);
+     const now=new Date().toISOString(),url=typeof input?.post_url==='string'?input.post_url.slice(0,500):'',msg=typeof input?.error==='string'?input.error.slice(0,2000):'';
+     if(input?.ok===true)await env.DB.prepare("UPDATE posts SET status='ĐÃ ĐĂNG',post_url=?,error='',posted_at=?,updated=? WHERE id=?").bind(url,now,now,m[1]).run();
+     else await env.DB.prepare("UPDATE posts SET status='LỖI',error=?,updated=? WHERE id=?").bind(msg||'Make báo lỗi.',now,m[1]).run();
+     return json({ok:true})}}
+  return json({error:'Không hỗ trợ.'},404)
+ }catch(e){return json({error:'Chưa xử lý được yêu cầu.'},500)}}
 async function handle(req,env){const u=new URL(req.url),path=u.pathname;
 if(path.startsWith('/media/')){if(req.method!=='GET')return json({error:'Không hỗ trợ.'},405);const key=path.slice(7);if(!/^[a-zA-Z0-9._-]+$/.test(key))return new Response('Not found',{status:404});if(!env.MEDIA)return new Response('Not configured',{status:503});const o=await env.MEDIA.get(key);if(!o)return new Response('Not found',{status:404});return new Response(o.body,{headers:{'content-type':o.httpMetadata?.contentType||'application/octet-stream','cache-control':'public,max-age=31536000,immutable','x-content-type-options':'nosniff'}})}
 if(!path.startsWith('/api/')){const response=await env.ASSETS.fetch(req);const headers=new Headers(response.headers);headers.set('X-Content-Type-Options','nosniff');headers.set('Referrer-Policy','strict-origin-when-cross-origin');headers.set('Content-Security-Policy',path.startsWith('/admin/booking')?BOOKING_CSP:CSP);if(path.startsWith('/admin'))headers.set('Cache-Control','no-store');return new Response(response.body,{status:response.status,headers})}
 if(!env.DB)return json({error:'Chưa kết nối kho nội dung Cloudflare.'},503);
 if(path==='/api/public'&&req.method==='GET'){const {results}=await env.DB.prepare('SELECT id,published,updated FROM content WHERE published IS NOT NULL').all();return json({items:results.map(x=>({id:x.id,...JSON.parse(x.published),updated:x.updated}))})}
+if(path.startsWith('/api/machine/'))return machineApi(req,env,path,u);
 if(req.method!=='GET'&&req.headers.get('origin')!==u.origin)return json({error:'Yêu cầu không hợp lệ.'},403);
 if(path==='/api/login'&&req.method==='POST'){
  if(!env.ADMIN_PASSWORD_HASH)return json({error:'Chưa thiết lập tài khoản quản trị.'},503);
@@ -94,7 +129,7 @@ if(req.method!=='GET'&&req.headers.get('x-csrf-token')!==session.csrf)return jso
 if(path==='/api/session'&&req.method==='GET')return json({email:EMAIL,csrf:session.csrf});
 if(path==='/api/logout'&&req.method==='POST'){await env.DB.prepare('DELETE FROM sessions WHERE token=?').bind(await sha(token)).run();return json({ok:true},200,{'set-cookie':sessionCookie('',0,req)})}
 if(path==='/api/content'&&req.method==='GET'){const {results}=await env.DB.prepare('SELECT * FROM content ORDER BY updated DESC').all();return json({items:results.map(x=>({id:x.id,draft:JSON.parse(x.draft),published:x.published?JSON.parse(x.published):null,updated:x.updated}))})}
-if(path==='/api/upload'&&req.method==='POST'){if(!env.MEDIA)return json({error:'Chưa kết nối kho ảnh.'},503);const type=req.headers.get('content-type')||'',extensions={'image/jpeg':'jpg','image/png':'png','image/webp':'webp'};if(!extensions[type])return json({error:'Chỉ nhận JPG, PNG hoặc WebP.'},400);if(Number(req.headers.get('content-length')||0)>5*1024*1024)return json({error:'Ảnh tối đa 5 MB.'},413);const bytes=await req.arrayBuffer();if(bytes.byteLength>5*1024*1024)return json({error:'Ảnh tối đa 5 MB.'},413);const b=new Uint8Array(bytes);const signature=type==='image/jpeg'?b[0]===255&&b[1]===216&&b[2]===255:type==='image/png'?hex(bytes.slice(0,8))==='89504e470d0a1a0a':String.fromCharCode(...b.slice(0,4))==='RIFF'&&String.fromCharCode(...b.slice(8,12))==='WEBP';if(!signature)return json({error:'Tệp không phải ảnh hợp lệ.'},400);const key=crypto.randomUUID()+'.'+extensions[type];await env.MEDIA.put(key,bytes,{httpMetadata:{contentType:type}});return json({url:'/media/'+key})}
+if(path==='/api/upload'&&req.method==='POST')return uploadImage(req,env);
 if(path==='/api/booking-qr'&&req.method==='GET'){
  // Lấy mã QR VietQR qua máy chủ để trình duyệt chụp ảnh phiếu được (không bị chặn khác nguồn). Tài khoản nhận cố định.
  const amount=u.searchParams.get('amount')||'0',info=u.searchParams.get('info')||'';
