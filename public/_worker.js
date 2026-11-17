@@ -94,7 +94,7 @@ async function machineApi(req,env,path,u){
   if(scope==='make'){
    if(path==='/api/machine/due'&&req.method==='GET'){
     const {results}=await env.DB.prepare("SELECT * FROM posts WHERE status='ĐÃ DUYỆT' AND platform='FACEBOOK' ORDER BY scheduled_at LIMIT 50").all();
-    return json({now:postClock(Date.now()),posts:results.map(r=>({id:r.id,scheduled_at:r.scheduled_at,scheduled_at_iso:new Date(postEpoch(r.scheduled_at)).toISOString(),kind:r.kind,body:r.body,images:(r.image?r.image.split('\n'):[]).map(x=>u.origin+x)}))})}
+    return json({now:postClock(Date.now()),posts:results.map(r=>({id:r.id,scheduled_at:r.scheduled_at,scheduled_at_iso:new Date(postEpoch(r.scheduled_at)).toISOString(),kind:r.kind,body:r.body,images:(r.image?r.image.split('\n'):[]).map(x=>u.origin+x),photos:(r.image?r.image.split('\n'):[]).map(x=>({type:'url',url:u.origin+x}))}))})}
     const m=/^\/api\/machine\/result\/(P[a-z0-9]{6,30})$/.exec(path);
     if(m&&req.method==='POST'){
      let input;try{input=await req.json()}catch{return json({error:'Nội dung không hợp lệ.'},400)}
