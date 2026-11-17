@@ -48,6 +48,7 @@ test('Machine API: keys, scopes, drafts from Claude, due list and results for Ma
   const due=await (await mcall(env,'due','GET',undefined,makeKey)).json();
   assert.equal(due.posts.length,1);assert.equal(due.posts[0].id,id);assert.equal(due.posts[0].scheduled_at,when);
   assert.deepEqual(due.posts[0].images,[origin+url,origin+'/media/b.jpg']);
+  assert.deepEqual(due.posts[0].photos,[{type:'url',url:origin+url},{type:'url',url:origin+'/media/b.jpg'}]);
   assert.ok(Math.abs(Date.parse(due.posts[0].scheduled_at_iso)-(Date.now()+5*3600000))<120000);
   // Result: success, repeat is harmless, unknown id, error path
   assert.equal((await mcall(env,'result/'+id,'POST',{ok:true,post_url:'https://facebook.com/x/1'},makeKey)).status,200);
