@@ -18,7 +18,7 @@ export function sanitize(input){return String(input||'').replace(/<!--[\s\S]*?--
 function validate(value,id){if(!value||typeof value!=='object'||Array.isArray(value))throw Error('Nội dung không hợp lệ.');const p={};if(id==='settings'){const keys=['heroTitle','heroSubtitle','heroImage','aboutTitle','aboutBody','founderName','founderImage','phone','email','company','address','hours','zalo','cardVinpearl','cardHotel','cardTour','cardTicket'];for(const k of [...keys,...Object.keys(value).filter(k=>/^home[A-Z][A-Za-z0-9]{0,60}$/.test(k))]){if(value[k]!==undefined){if(typeof value[k]!=='string'||value[k].length>12000)throw Error('Trường nội dung quá dài.');p[k]=value[k]}}for(const k of ['heroImage','founderImage','cardVinpearl','cardHotel','cardTour','cardTicket'])if(p[k]&&!validImage(p[k]))throw Error('Ảnh không hợp lệ.');if(p.phone&&!/^\+?[0-9\s-]{8,20}$/.test(p.phone))throw Error('Số điện thoại không hợp lệ.');if(p.zalo&&!/^https:\/\/zalo\.me\/[0-9]+$/.test(p.zalo))throw Error('Liên kết Zalo không hợp lệ.');return p}for(const k of ['title','summary','category','author','body','cover']){if(value[k]!==undefined&&typeof value[k]!=='string')throw Error('Nội dung không hợp lệ.');p[k]=value[k]||''}if(!p.title.trim()||p.title.length>180||p.summary.length>1000||p.body.length>150000||p.author.length>150||p.category.length>150)throw Error('Kiểm tra tiêu đề và độ dài bài viết.');if(p.cover&&!validImage(p.cover))throw Error('Ảnh không hợp lệ.');p.body=sanitize(p.body);return p}
 function validateBooking(b,expected){if(!b||typeof b!=='object'||Array.isArray(b))throw Error('Dữ liệu đơn hàng không hợp lệ.');if(typeof b.id!=='string'||!/^ST[0-9]{1,12}$/.test(b.id)||(expected&&b.id!==expected))throw Error('Mã đơn không hợp lệ.');if(typeof b.name!=='string'||b.name.length>200||typeof b.phone!=='string'||b.phone.length>60)throw Error('Tên hoặc số điện thoại không hợp lệ.');if(!Array.isArray(b.svcs)||b.svcs.length>60||!b.svcs.every(x=>x&&typeof x==='object'&&!Array.isArray(x)))throw Error('Danh sách dịch vụ không hợp lệ.');if(!Array.isArray(b.payments)||b.payments.length>200||!b.payments.every(x=>x&&typeof x==='object'&&Number.isFinite(x.amount)))throw Error('Danh sách thanh toán không hợp lệ.');if(!Number.isFinite(b.totalAmt)||b.totalAmt<0)throw Error('Tổng tiền không hợp lệ.');if(JSON.stringify(b).length>150000)throw Error('Dữ liệu đơn quá lớn.');return b}
 // ---- Bài đăng Facebook/Threads (lịch đăng, sửa bài, mẫu phong cách) ----
-const POST_PLATFORMS=['FACEBOOK','THREADS'],POST_LEAD_MS=45*60000,POST_MAX_IMAGES=10;
+const POST_PLATFORMS=['FACEBOOK','THREADS'],POST_LEAD_MS=5*60000,POST_MAX_IMAGES=10;
 const postClock=ms=>new Date(ms+7*3600000).toISOString().slice(0,16).replace('T',' ');
 const postEpoch=s=>Date.parse(s.replace(' ','T')+':00+07:00');
 function validPostTime(s){if(typeof s!=='string'||!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(s))return false;const ms=postEpoch(s);return Number.isFinite(ms)&&postClock(ms)===s}
@@ -51,11 +51,12 @@ async function postsApi(req,env,path){
    return json({id:nid},201)}
   if(!id)return json({error:'Không hỗ trợ.'},405);
   const row=await env.DB.prepare('SELECT * FROM posts WHERE id=?').bind(id).first();if(!row)return json({error:'Không tìm thấy bài.'},404);
-  if(req.method==='DELETE'){if(row.status==='ĐÃ DUYỆT')return json({error:'Hãy bỏ hẹn giờ trước khi xóa bài.'},409);await env.DB.prepare('DELETE FROM posts WHERE id=?').bind(id).run();return json({ok:true})}
+  if(req.method==='DELETE'){if(row.status==='ĐANG ĐĂNG')return json({error:'Bài đang được đăng lên Facebook, chưa xóa được.'},409);if(row.status==='ĐÃ DUYỆT')return json({error:'Hãy bỏ hẹn giờ trước khi xóa bài.'},409);await env.DB.prepare('DELETE FROM posts WHERE id=?').bind(id).run();return json({ok:true})}
   if(req.method!=='PUT')return json({error:'Không hỗ trợ.'},405);
   let input,f;try{input=await req.json();f=cleanPostFields(input?.data||{},true)}catch(e){return json({error:e.message||'Nội dung không hợp lệ.'},400)}
   const action=input.action||'save';if(!['save','approve','unapprove','posted'].includes(action))return json({error:'Thao tác không hợp lệ.'},400);
   if(row.status==='ĐÃ ĐĂNG')return json({error:'Bài đã đăng, không sửa được.'},409);
+  if(row.status==='ĐANG ĐĂNG'&&action!=='posted')return json({error:'Bài đang được đăng lên Facebook, chờ ít phút rồi tải lại trang.'},409);
   const next={...row,...f},contentChanged=['body','image','scheduled_at','platform'].some(k=>f[k]!==undefined&&f[k]!==row[k]);
   if(row.status==='ĐÃ DUYỆT'&&action!=='unapprove'&&action!=='posted'&&contentChanged)return json({error:'Bài đang hẹn giờ. Hãy bỏ hẹn giờ trước khi sửa.'},409);
   next.kind=next.image?'CÓ ẢNH':'CHỮ THUẦN';let status=row.status,posted=row.posted_at;
@@ -63,7 +64,7 @@ async function postsApi(req,env,path){
    if(!next.body.trim())return json({error:'Bài chưa có nội dung.'},400);
    if(next.kind==='CÓ ẢNH'&&!next.image)return json({error:'Bài cần có ảnh.'},400);
    if(!validPostTime(next.scheduled_at))return json({error:'Hãy chọn giờ đăng.'},400);
-   if(postEpoch(next.scheduled_at)<Date.now()+POST_LEAD_MS)return json({error:'Giờ đăng phải cách hiện tại ít nhất 45 phút.'},400);
+   if(postEpoch(next.scheduled_at)<Date.now()+POST_LEAD_MS)return json({error:'Giờ đăng phải cách hiện tại ít nhất 5 phút.'},400);
    status='ĐÃ DUYỆT';next.error=''}
   else if(action==='unapprove'){if(!['ĐÃ DUYỆT','LỖI'].includes(row.status))return json({error:'Bài chưa được hẹn giờ.'},409);status='NHÁP';next.error=''}
   else if(action==='posted'){status='ĐÃ ĐĂNG';posted=new Date().toISOString()}
@@ -78,6 +79,31 @@ async function uploadImage(req,env){if(!env.MEDIA)return json({error:'Chưa kế
 async function machineScope(req,env){
  const m=/^Bearer ([A-Za-z0-9_-]{40,80})$/.exec(req.headers.get('authorization')||'');if(!m)return null;
  try{const row=await env.DB.prepare('SELECT scope FROM machine_tokens WHERE hash=?').bind(await sha(m[1])).first();return row?.scope||null}catch{return null}}
+// Mỗi phút một Cloudflare Worker gọi vào đây: bài đã duyệt và tới giờ được gửi sang Make để đăng thẳng lên Page (không hẹn giờ trong Business Suite).
+const POST_STALE_MS=60*60000,POST_SENDING_MS=15*60000;
+async function tick(env,origin){
+ if(!env.MAKE_WEBHOOK_URL)return json({error:'Chưa cài địa chỉ nhận bài của Make.'},503);
+ const nowMs=Date.now(),now=new Date(nowMs).toISOString(),sum={sent:0,expired:0,stuck:0,failed:0};
+ // Gửi sang Make quá 15 phút mà chưa có kết quả: báo lỗi, không tự đăng lại để tránh đăng đôi.
+ const stuck=await env.DB.prepare("UPDATE posts SET status='LỖI',error=?,updated=? WHERE status='ĐANG ĐĂNG' AND updated<?").bind('Make chưa báo kết quả sau 15 phút. Hãy kiểm tra trang Facebook trước khi đăng lại để tránh đăng đôi.',now,new Date(nowMs-POST_SENDING_MS).toISOString()).run();
+ sum.stuck=stuck.meta?.changes||0;
+ const {results}=await env.DB.prepare("SELECT * FROM posts WHERE status='ĐÃ DUYỆT' AND platform='FACEBOOK' AND scheduled_at<>'' AND scheduled_at<=? ORDER BY scheduled_at LIMIT 5").bind(postClock(nowMs)).all();
+ for(const r of results){
+  if(nowMs-postEpoch(r.scheduled_at)>POST_STALE_MS){
+   await env.DB.prepare("UPDATE posts SET status='LỖI',error=?,updated=? WHERE id=? AND status='ĐÃ DUYỆT'").bind('Đã quá giờ đăng hơn 60 phút nên hệ thống không tự đăng. Hãy hẹn giờ lại.',now,r.id).run();sum.expired++;continue}
+  const claim=await env.DB.prepare("UPDATE posts SET status='ĐANG ĐĂNG',updated=? WHERE id=? AND status='ĐÃ DUYỆT'").bind(now,r.id).run();
+  if(!claim.meta?.changes)continue;
+  const photos=(r.image?r.image.split('\n'):[]).map(x=>({type:'url',url:origin+x}));
+  let state='sent';
+  try{
+   const res=await fetch(env.MAKE_WEBHOOK_URL,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id:r.id,kind:r.kind,body:r.body,scheduled_at:r.scheduled_at,photos}),signal:AbortSignal.timeout(10000)});
+   if(!res.ok)state='retry'}
+  catch(e){state=e?.name==='TimeoutError'?'unsure':'retry'}
+  if(state==='sent'){sum.sent++;continue}
+  sum.failed++;
+  if(state==='retry')await env.DB.prepare("UPDATE posts SET status='ĐÃ DUYỆT',updated=? WHERE id=? AND status='ĐANG ĐĂNG'").bind(new Date().toISOString(),r.id).run();
+  else await env.DB.prepare("UPDATE posts SET status='LỖI',error=?,updated=? WHERE id=? AND status='ĐANG ĐĂNG'").bind('Gửi sang Make quá thời gian, chưa rõ bài đã lên chưa. Hãy kiểm tra trang Facebook trước khi đăng lại.',new Date().toISOString(),r.id).run()}
+ return json({ok:true,...sum})}
 async function machineApi(req,env,path,u){
  const scope=await machineScope(req,env);if(!scope)return json({error:'Khóa không hợp lệ.'},401);
  try{
@@ -91,6 +117,8 @@ async function machineApi(req,env,path,u){
     const d=input&&typeof input==='object'&&!Array.isArray(input)?input:{},data={};
     for(const k of ['platform','body','source','stt','note','image'])if(d[k]!==undefined)data[k]=Array.isArray(d[k])?d[k].join('\n'):d[k];
     return postsApi(new Request(u.origin+'/api/posts',{method:'POST',body:JSON.stringify({data,from_claude:true})}),env,'/api/posts')}}
+  if(scope==='clock'){
+   if(path==='/api/machine/tick'&&req.method==='POST')return tick(env,u.origin)}
   if(scope==='make'){
    if(path==='/api/machine/due'&&req.method==='GET'){
     const {results}=await env.DB.prepare("SELECT * FROM posts WHERE status='ĐÃ DUYỆT' AND platform='FACEBOOK' ORDER BY scheduled_at LIMIT 50").all();
@@ -100,7 +128,7 @@ async function machineApi(req,env,path,u){
      let input;try{input=await req.json()}catch{return json({error:'Nội dung không hợp lệ.'},400)}
      const row=await env.DB.prepare('SELECT status FROM posts WHERE id=?').bind(m[1]).first();if(!row)return json({error:'Không tìm thấy bài.'},404);
      if(row.status==='ĐÃ ĐĂNG')return json({ok:true,already:true});
-     if(row.status!=='ĐÃ DUYỆT')return json({error:'Bài không ở trạng thái đã hẹn giờ.'},409);
+     if(!(['ĐÃ DUYỆT','ĐANG ĐĂNG'].includes(row.status)||(row.status==='LỖI'&&input?.ok===true)))return json({error:'Bài không ở trạng thái chờ đăng.'},409);
      const now=new Date().toISOString(),url=typeof input?.post_url==='string'?input.post_url.slice(0,500):'',msg=typeof input?.error==='string'?input.error.slice(0,2000):'';
      if(input?.ok===true)await env.DB.prepare("UPDATE posts SET status='ĐÃ ĐĂNG',post_url=?,error='',posted_at=?,updated=? WHERE id=?").bind(url,now,now,m[1]).run();
      else await env.DB.prepare("UPDATE posts SET status='LỖI',error=?,updated=? WHERE id=?").bind(msg||'Make báo lỗi.',now,m[1]).run();

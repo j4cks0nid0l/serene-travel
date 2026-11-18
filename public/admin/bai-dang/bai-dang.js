@@ -3,7 +3,8 @@ const MAX_IMAGES=10;
 let csrf='',posts=[],nowText='',filter='',target=null;
 const drafts=new Map();
 const TABS=[['NHÁP','Chờ duyệt'],['ĐÃ DUYỆT','Đã hẹn giờ'],['ĐÃ ĐĂNG','Đã đăng'],['LỖI','Lỗi'],['ALL','Tất cả']];
-const STATUS_PILL={'NHÁP':['Chờ duyệt','draft'],'ĐÃ DUYỆT':['Đã hẹn giờ','ok'],'ĐÃ ĐĂNG':['Đã đăng','done'],'LỖI':['Lỗi','err']};
+const STATUS_PILL={'NHÁP':['Chờ duyệt','draft'],'ĐÃ DUYỆT':['Đã hẹn giờ','ok'],'ĐÃ ĐĂNG':['Đã đăng','done'],'ĐANG ĐĂNG':['Đang đăng','ok'],'LỖI':['Lỗi','err']};
+const tabOf=p=>p.status==='ĐANG ĐĂNG'?'ĐÃ DUYỆT':p.status;
 const epoch=s=>Date.parse(s.replace(' ','T')+':00+07:00');
 const clock=ms=>new Date(ms+7*3600000).toISOString().slice(0,16).replace('T',' ');
 function show(text){$('status').textContent=text||''}
@@ -22,7 +23,7 @@ async function load(keepFilter=true){
  const r=await api('posts');posts=r.posts;nowText=r.now;
  if(!keepFilter||!filter)filter=posts.some(p=>p.status==='NHÁP')?'NHÁP':'ALL';
  render()}
-function counts(){const c={ALL:posts.length};for(const [k] of TABS)if(k!=='ALL')c[k]=posts.filter(p=>p.status===k).length;return c}
+function counts(){const c={ALL:posts.length};for(const [k] of TABS)if(k!=='ALL')c[k]=posts.filter(p=>tabOf(p)===k).length;return c}
 function renderTabs(){
  const c=counts(),root=$('tabs');root.replaceChildren();
  for(const [key,label] of TABS){const b=document.createElement('button');b.type='button';b.className='tab';b.setAttribute('role','tab');b.setAttribute('aria-selected',String(filter===key));b.append(label);const n=document.createElement('span');n.className='n';n.textContent=c[key];b.append(n);b.onclick=()=>{filter=key;render()};root.append(b)}}
@@ -89,12 +90,12 @@ function card(p){
  if(p.status==='ĐÃ DUYỆT')actions.append(button('Bỏ hẹn giờ','',function(){run([this],async()=>{await api('posts/'+p.id,'PUT',{action:'unapprove',data:{}});filter='NHÁP';await load();show('Đã bỏ hẹn giờ, bài về mục Chờ duyệt.')})}));
  if(p.status==='LỖI')actions.append(button('Đưa về chờ duyệt','',function(){run([this],async()=>{await api('posts/'+p.id,'PUT',{action:'unapprove',data:{}});filter='NHÁP';await load()})}));
  actions.append(button('Sao chép','',async()=>{try{await navigator.clipboard.writeText(ta.value);show('Đã sao chép nội dung bài.')}catch{ta.select();show('Chưa sao chép tự động được. Nội dung đã được chọn, bấm Ctrl+C.')}}));
- if(p.status!=='ĐÃ ĐĂNG')actions.append(button('Đã đăng','',function(){if(!confirm('Đánh dấu bài này là đã đăng?'))return;run([this],async()=>{await api('posts/'+p.id,'PUT',{action:'posted',data:p.status==='ĐÃ DUYỆT'?{}:edits(p)});drafts.delete(p.id);await load();show('Đã đánh dấu đã đăng.')})}));
- if(p.status!=='ĐÃ DUYỆT')actions.append(button('Xóa','danger',function(){if(!confirm('Xóa bài này? Không khôi phục được.'))return;run([this],async()=>{await api('posts/'+p.id,'DELETE');drafts.delete(p.id);await load();show('Đã xóa.')})}));
+ if(p.status!=='ĐÃ ĐĂNG')actions.append(button('Đã đăng','',function(){if(!confirm('Đánh dấu bài này là đã đăng?'))return;run([this],async()=>{await api('posts/'+p.id,'PUT',{action:'posted',data:['ĐÃ DUYỆT','ĐANG ĐĂNG'].includes(p.status)?{}:edits(p)});drafts.delete(p.id);await load();show('Đã đánh dấu đã đăng.')})}));
+ if(!['ĐÃ DUYỆT','ĐANG ĐĂNG'].includes(p.status))actions.append(button('Xóa','danger',function(){if(!confirm('Xóa bài này? Không khôi phục được.'))return;run([this],async()=>{await api('posts/'+p.id,'DELETE');drafts.delete(p.id);await load();show('Đã xóa.')})}));
  box.append(actions);return box}
 function render(){
  renderTabs();const list=$('list');list.replaceChildren();
- const shown=sorted(filter==='ALL'?posts:posts.filter(p=>p.status===filter));
+ const shown=sorted(filter==='ALL'?posts:posts.filter(p=>tabOf(p)===filter));
  if(!shown.length){list.append(el('div','empty',filter==='NHÁP'?'Chưa có bài nào chờ duyệt.':'Chưa có bài trong mục này.'));return}
  for(const p of shown)list.append(card(p))}
 async function prepareImage(file){
@@ -110,13 +111,13 @@ function openSchedule(p){
  target=p;const today=nowText.slice(0,10),tomorrow=clock(epoch(nowText)+24*3600000).slice(0,10);
  const date=$('schedule-date');date.min=today;date.value=p.scheduled_at&&p.scheduled_at.slice(0,10)>=today?p.scheduled_at.slice(0,10):tomorrow;
  $('schedule-custom').value='';drawChips();$('schedule-dialog').showModal()}
-function tooSoon(day,time){return epoch(day+' '+time)<Date.now()+45*60000}
+function tooSoon(day,time){return epoch(day+' '+time)<Date.now()+5*60000}
 function drawChips(){
  const root=$('chips');root.replaceChildren();const day=$('schedule-date').value;
  for(const t of times()){const b=button(t,'',()=>confirmTime(t));b.disabled=!day||tooSoon(day,t);root.append(b)}}
 async function confirmTime(time){
  const day=$('schedule-date').value;if(!day){show('Hãy chọn ngày đăng.');return}
- if(tooSoon(day,time)){show('Giờ đăng phải cách hiện tại ít nhất 45 phút.');return}
+ if(tooSoon(day,time)){show('Giờ đăng phải cách hiện tại ít nhất 5 phút.');return}
  const p=target;if(!p)return;const dialogButtons=[...document.querySelectorAll('#schedule-dialog button')];
  await run(dialogButtons,async()=>{await api('posts/'+p.id,'PUT',{action:'approve',data:{...edits(p),scheduled_at:day+' '+time}});drafts.delete(p.id);$('schedule-dialog').close();filter='ĐÃ DUYỆT';await load();show('Đã hẹn giờ '+fmt(day+' '+time)+'.')});
  }

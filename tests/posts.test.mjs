@@ -35,9 +35,9 @@ test('Posts API: login required, create, edit, schedule rules, style samples',as
   assert.equal((await call('posts/'+id,'PUT',{data:{body:'Bài sửa lần hai.'}})).status,200);
   assert.equal((await env.DB.prepare('SELECT COUNT(*) AS n FROM style_samples WHERE post_id=?').bind(id).first()).n,1);
   assert.equal((await env.DB.prepare('SELECT edited,original FROM style_samples WHERE post_id=?').bind(id).first()).original,'Bài gốc của Claude.');
-  // Approve needs a time at least 45 minutes ahead
+  // Approve needs a time at least 5 minutes ahead
   assert.equal((await call('posts/'+id,'PUT',{action:'approve',data:{}})).status,400);
-  assert.equal((await call('posts/'+id,'PUT',{action:'approve',data:{scheduled_at:inHours(0.2)}})).status,400);
+  assert.equal((await call('posts/'+id,'PUT',{action:'approve',data:{scheduled_at:inHours(0.05)}})).status,400);
   assert.equal((await call('posts/'+id,'PUT',{action:'approve',data:{scheduled_at:vn(Date.now()-3600000)}})).status,400);
   assert.equal((await call('posts/'+id,'PUT',{action:'approve',data:{body:'  ',scheduled_at:inHours(5)}})).status,400);
   const when=inHours(5);
