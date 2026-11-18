@@ -112,8 +112,12 @@ Cài đặt trên Cloudflare:
 1. Mở D1 database `serene-content`, tab Console, dán nội dung `schema-posts.sql` rồi chạy.
 2. Deploy lại. Nếu chưa chạy bước 1, trang Bài đăng báo lỗi 503 và nêu rõ tên file cần chạy.
 
-Giai đoạn 1 làm được: danh sách bài theo trạng thái (Chờ duyệt, Đã hẹn giờ, Đã đăng, Lỗi), thêm bài, sửa chữ, gắn ảnh (tự thu nhỏ khi lớn hơn 1,5 MB, lưu qua R2), hẹn giờ bằng cách bấm giờ trong hộp chọn (giờ phải cách hiện tại ít nhất 45 phút), bỏ hẹn giờ, đánh dấu đã đăng, sao chép nội dung. Giờ đăng lưu theo giờ Việt Nam (UTC+7), dạng `YYYY-MM-DD HH:mm`.
+Giai đoạn 1 làm được: danh sách bài theo trạng thái (Chờ duyệt, Đã hẹn giờ, Đã đăng, Lỗi), thêm bài, sửa chữ, gắn ảnh (tự thu nhỏ khi lớn hơn 1,5 MB, lưu qua R2), hẹn giờ bằng cách bấm giờ trong hộp chọn (giờ phải cách hiện tại ít nhất 5 phút), bỏ hẹn giờ, đánh dấu đã đăng, sao chép nội dung. Giờ đăng lưu theo giờ Việt Nam (UTC+7), dạng `YYYY-MM-DD HH:mm`.
 
 Khi bài do Claude viết được gửi vào (trường `from_claude`), bản gốc được giữ lại. Mỗi lần Jackson sửa bài, hoặc duyệt không sửa, hệ thống lưu một dòng trong `style_samples` để Claude học phong cách. Bài tự thêm bằng tay không tạo mẫu.
 
 Chưa làm ở giai đoạn này: tự đăng lên Facebook (nối với Make), Claude đọc và ghi bài qua mã riêng, viết bài từ ảnh. Bài "Đã hẹn giờ" hiện chỉ được lưu lịch.
+
+### Đăng thẳng đúng giờ (không hẹn giờ trong Business Suite)
+
+Mỗi phút, Cloudflare Worker `workers/clock` gọi `POST /api/machine/tick` (khóa riêng, scope `clock`). Trang web tìm bài "Đã hẹn giờ" đã tới giờ, đổi sang "Đang đăng" rồi gửi bài sang webhook của Make (biến `MAKE_WEBHOOK_URL`). Make đăng thẳng lên Page rồi báo kết quả về `/api/machine/result/{id}`. Bài quá giờ hơn 60 phút, hoặc gửi Make quá 15 phút chưa có kết quả, chuyển sang "Lỗi" và không tự đăng lại để tránh đăng đôi.
