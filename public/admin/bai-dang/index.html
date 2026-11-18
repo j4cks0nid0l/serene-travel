@@ -2,11 +2,11 @@
 <header><a href="/admin/" class="brand"><img src="/assets/8436733ede1296a71ad7.jpg" alt=""><span>Serene Travel</span></a><span class="header-note">Quản lý bài đăng</span><a class="nav-link first" href="/admin/">Chọn khu</a><a class="nav-link" href="/admin/booking/">Booking</a><button id="logout" type="button">Đăng xuất</button></header>
 <main>
 <div class="posts-top"><h1>Bài đăng</h1><div class="posts-add"><button id="add-facebook" class="primary" type="button">+ Bài Facebook</button><button id="add-threads" type="button">+ Bài Threads</button></div></div>
-<p class="notice">Bài bấm "Hẹn giờ đăng" sẽ được Make tự đặt lịch lên Facebook trong vòng 15 phút. Sau khi đặt lịch, bài chuyển sang "Đã đăng". Nếu Facebook từ chối, bài chuyển sang "Lỗi" kèm lý do.</p>
+<p class="notice">Bài bấm "Hẹn giờ đăng" sẽ được đăng thẳng lên Facebook đúng giờ đã chọn (không hẹn giờ trong Business Suite). Đăng xong, bài chuyển sang "Đã đăng". Nếu Facebook từ chối, bài chuyển sang "Lỗi" kèm lý do.</p>
 <p id="status" role="status" aria-live="polite"></p>
 <div class="tabs" id="tabs" role="tablist" aria-label="Lọc bài"></div>
 <div id="list" class="post-list"></div>
 </main>
-<dialog id="schedule-dialog"><form method="dialog" class="schedule"><h2>Hẹn giờ đăng</h2><label for="schedule-date">Ngày đăng<input id="schedule-date" type="date"></label><div class="chips-label">Bấm vào giờ để hẹn</div><div id="chips" class="chips"></div><label for="schedule-custom">Hoặc nhập giờ khác<input id="schedule-custom" type="time"></label><div class="schedule-actions"><button id="schedule-custom-ok" type="button" class="primary">Hẹn giờ này</button><button id="schedule-cancel" type="button">Đóng</button></div><p id="schedule-note">Giờ đăng phải cách hiện tại ít nhất 45 phút.</p></form></dialog>
+<dialog id="schedule-dialog"><form method="dialog" class="schedule"><h2>Hẹn giờ đăng</h2><label for="schedule-date">Ngày đăng<input id="schedule-date" type="date"></label><div class="chips-label">Bấm vào giờ để hẹn</div><div id="chips" class="chips"></div><label for="schedule-custom">Hoặc nhập giờ khác<input id="schedule-custom" type="time"></label><div class="schedule-actions"><button id="schedule-custom-ok" type="button" class="primary">Hẹn giờ này</button><button id="schedule-cancel" type="button">Đóng</button></div><p id="schedule-note">Giờ đăng phải cách hiện tại ít nhất 5 phút.</p></form></dialog>
 <script type="module" src="./bai-dang.js"></script>
 </body></html>
