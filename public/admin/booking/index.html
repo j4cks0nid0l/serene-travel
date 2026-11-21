@@ -241,7 +241,7 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
 .sb-item:hover{background:#F0F7FA}
 .sb-item.active{background:#EBF5F9;color:#2A5F78;font-weight:600}
 .sb-caret{margin-left:auto;transition:transform .2s}
-.sb-item.active .sb-caret{transform:rotate(180deg)}
+.sb-item.sub-open .sb-caret{transform:rotate(180deg)}
 .sb-sub{display:none;flex-direction:column;gap:1px;margin:0 0 4px 22px;padding-left:10px;border-left:1.5px solid rgba(58,125,153,.2)}
 .sb-sub.open{display:flex}
 .sb-sub-item{font-family:inherit;font-size:13px;color:#5A6F7D;background:none;border:none;text-align:left;padding:7px 10px;border-radius:8px;cursor:pointer}
@@ -259,6 +259,11 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
  .menu-btn{display:none}
 }
 .a5-sn{font-weight:400;font-size:.86em;color:#5A6F7D;margin-top:.15em;white-space:pre-line}
+.pay-modal{position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(20,40,55,.45);z-index:9000;display:none;align-items:center;justify-content:center;padding:16px}
+.pay-modal.show{display:flex}
+.pay-modal-box{background:#fff;border-radius:14px;padding:20px 18px 16px;width:100%;max-width:380px;box-shadow:0 12px 40px rgba(20,40,55,.3);font-size:14px;line-height:1.55;color:#2C3E50}
+.pay-modal-sub{font-size:12px;color:#7A8FA0;margin-top:8px}
+.pay-modal-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:16px}
 .pt-quick{background:#fff;border:.5px dashed rgba(58,125,153,.45);border-radius:9px;padding:10px;margin:-2px 0 10px}
 .pt-quick .field-row{margin-bottom:8px}
 </style>
@@ -272,7 +277,7 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
     <button class="sb-item active" data-tab="new" onclick="go('new')"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Tạo đơn</button>
     <button class="sb-item" data-tab="list" onclick="go('list')"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M5 6h.01M5 12h.01M5 18h.01"/></svg>Danh sách</button>
     <button class="sb-item" data-tab="stats" onclick="go('stats')"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="12" width="4" height="8" rx="1"/><rect x="10" y="8" width="4" height="12" rx="1"/><rect x="16" y="4" width="4" height="16" rx="1"/></svg>Thống kê</button>
-    <button class="sb-item" data-tab="settings" onclick="go('settings')"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h8M18 6h2M4 12h2M12 12h8M4 18h10M20 18h0"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg>Thiết lập<span class="sb-caret"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></button>
+    <button class="sb-item" data-tab="settings" onclick="toggleSettings()" aria-expanded="false"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h8M18 6h2M4 12h2M12 12h8M4 18h10M20 18h0"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg>Thiết lập<span class="sb-caret"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></button>
     <div class="sb-sub" id="sb-sub">
       <button class="sb-sub-item active" data-sub="cats" onclick="go('settings','cats')">Loại dịch vụ</button>
       <button class="sb-sub-item" data-sub="units" onclick="go('settings','units')">Đơn vị tính</button>
@@ -404,6 +409,12 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
   </div>
 </div>
 
+<div class="pay-modal" id="pay-modal" role="dialog" aria-modal="true" aria-labelledby="pay-modal-text" onclick="if(event.target===this)closePay()">
+  <div class="pay-modal-box">
+    <div id="pay-modal-text"></div>
+    <div class="pay-modal-btns"><button class="btn-outline" onclick="closePay()">Hủy</button><button class="btn-main" style="padding:10px" onclick="okPay()">Xác nhận</button></div>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 </div>
 </div>
@@ -521,20 +532,32 @@ function toast(msg, ms){
   clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove("show"),ms||2500);
 }
 
-let curTab="new", curSub="cats";
+let curTab="new", curSub="cats", subOpen=false;
 function openMenu(){ $("sidebar").classList.add("open"); $("sb-overlay").classList.add("show"); }
 function closeMenu(){ $("sidebar").classList.remove("open"); $("sb-overlay").classList.remove("show"); }
 function go(tab,sub){ switchTab(tab,sub); closeMenu(); window.scrollTo({top:0}); }
 function switchTab(tab,sub){
   curTab=tab; if(sub) curSub=sub;
   document.querySelectorAll(".sb-item[data-tab]").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));
-  $("sb-sub").classList.toggle("open",tab==="settings");
+  if(tab==="settings") subOpen=true;
+  applySub();
   document.querySelectorAll(".sb-sub-item").forEach(b=>b.classList.toggle("active",b.dataset.sub===curSub));
   document.querySelectorAll(".panel").forEach(p=>p.classList.toggle("active",p.id==="panel-"+tab));
   document.querySelectorAll(".set-page").forEach(c=>{ c.style.display=c.dataset.page===curSub?"":"none"; });
   if(tab==="list") renderList();
   if(tab==="stats") renderStats();
   if(tab==="settings") renderSettings();
+}
+function applySub(){
+  const on=curTab==="settings"&&subOpen;
+  $("sb-sub").classList.toggle("open",on);
+  const b=document.querySelector('.sb-item[data-tab="settings"]');
+  b.classList.toggle("sub-open",on); b.setAttribute("aria-expanded",on?"true":"false");
+}
+// Bấm Thiết lập: đang mở thì thu lại (trang đang xem giữ nguyên), đang thu thì mở ra. Không đóng menu trên điện thoại để còn chọn mục con.
+function toggleSettings(){
+  if(curTab!=="settings"){ switchTab("settings"); window.scrollTo({top:0}); return; }
+  subOpen=!subOpen; applySub();
 }
 async function logout(){
   const hasForm=$("kh-name").value.trim()||$("kh-phone").value.trim();
@@ -1358,14 +1381,15 @@ function showDetail(id){
     <div class="sec-title"><i class="ti ti-credit-card"></i>Xác nhận thanh toán</div>
     ${(b.status!=="completed"||remain>0)?`
     <div class="pay-confirm-section">
-      <button class="pay-confirm-btn btn-confirm-coc" onclick="confirmPayment('${id}','coc50')">💰 Xác nhận đã nhận cọc 50% — ${VND(Math.round(b.totalAmt*0.5))}</button>
+      <button class="pay-confirm-btn btn-confirm-coc" onclick="askPay('${id}','coc50')">💰 Xác nhận đã nhận cọc 50% — ${VND(Math.round(b.totalAmt*0.5))}</button>
       <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end;margin-bottom:8px">
         <div><label style="font-size:11px;color:#7A8FA0;display:block;margin-bottom:3px">Hoặc nhập số tiền cọc thực tế (đ)</label>
         <input id="custom-coc-${id}" inputmode="numeric" placeholder="0" oninput="this.value=fmtInput(this.value)" style="padding:8px 10px;font-size:13px;font-family:inherit;border:.5px solid rgba(58,125,153,.25);border-radius:8px;background:#fff;color:#2C3E50;width:100%"></div>
-        <button class="btn-pay" style="margin-top:0" onclick="confirmPayment('${id}','custom')"><i class="ti ti-check"></i></button>
+        <button class="btn-pay" style="margin-top:0;white-space:nowrap" onclick="askPay('${id}','custom')">Xác nhận cọc</button>
       </div>
-      <button class="pay-confirm-btn btn-confirm-full" onclick="confirmPayment('${id}','full')">✅ Xác nhận đã nhận đủ 100% — ${VND(b.totalAmt)}</button>
-      ${remain>0&&paid>0?`<button class="pay-confirm-btn btn-confirm-full" onclick="confirmPayment('${id}','remaining')" style="background:#5BA4A4">💳 Xác nhận nhận nốt — ${VND(remain)}</button>`:""}
+      ${paid>0
+        ?`<button class="pay-confirm-btn btn-confirm-full" onclick="askPay('${id}','remaining')" style="background:#5BA4A4">💳 Đã nhận nốt<br><small style="font-weight:500">${VND(remain)}</small></button>`
+        :`<button class="pay-confirm-btn btn-confirm-full" onclick="askPay('${id}','full')">✅ Đã nhận đủ 100%<br><small style="font-weight:500">${VND(b.totalAmt)}</small></button>`}
     </div>`:""}
     ${payHist.length?'<div style="margin-top:10px">'+payHist+'</div>':""}
     <div class="pay-cards" style="margin-top:10px">
@@ -1383,9 +1407,10 @@ function showDetail(id){
   </div>
 
   <div class="card">
-    <div class="sec-title"><i class="ti ti-send"></i>Phiếu điều hành gửi đối tác</div>
-    ${b.svcs.map((s,si)=>`<button class="btn-outline" style="width:100%;margin-bottom:6px;text-align:left" onclick="copyDH('${id}',${si})"><i class="ti ti-copy"></i>Copy ĐH: ${esc(s.name)}${s.partner?" · "+esc(s.partner):""}</button>`).join("")}
-    <div style="font-size:11px;color:#7A8FA0;margin-top:2px">Mỗi dịch vụ là một tin nhắn riêng. Cần nhập giá net ở mục trên trước.</div>
+    <div class="sec-title"><i class="ti ti-send"></i>Gửi đối tác</div>
+    ${b.svcs.map((s,si)=>`<div style="margin-bottom:10px"><div style="font-size:12px;font-weight:600;color:#2A5F78;margin-bottom:5px">${esc(s.name)}${s.partner?` <span style="font-weight:400;color:#7A8FA0">· ${esc(s.partner)}</span>`:""}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button class="btn-outline" onclick="copyPartner('${id}',${si},'email')">Copy Email</button><button class="btn-outline" onclick="copyPartner('${id}',${si},'zalo')">Copy Zalo</button></div></div>`).join("")}
+    <div style="font-size:11px;color:#7A8FA0;margin-top:2px">Mỗi dịch vụ là một tin riêng, gửi đúng đối tác của dịch vụ đó. Cần nhập giá net ở mục trên trước.</div>
   </div>
 
   <div class="card">
@@ -1406,22 +1431,36 @@ function showDetail(id){
   setTimeout(()=>$("detail-wrap").scrollIntoView({behavior:"smooth",block:"nearest"}),80);
 }
 
+// Tính số tiền và nhãn cho từng nút ghi nhận tiền
+function payInfo(b,type,id){
+  const paid=b.payments.reduce((a,p)=>a+p.amount,0), remain=b.totalAmt-paid;
+  if(type==="coc50") return {amt:Math.round(b.totalAmt*0.5), label:"Cọc 50%", ask:"nhận cọc 50%"};
+  if(type==="full") return {amt:b.totalAmt-paid, label:"Thanh toán full", ask:"nhận đủ 100%"};
+  if(type==="remaining") return {amt:remain, label:"Thanh toán nốt", ask:"nhận nốt"};
+  if(type==="custom") return {amt:parseNum($("custom-coc-"+id)?$("custom-coc-"+id).value:""), label:"Tiền cọc", ask:"nhận cọc"};
+  return {amt:0,label:"",ask:""};
+}
+// Hỏi lại trước khi ghi nhận tiền
+let pendingPay=null;
+function askPay(id,type){
+  const b=bookings.find(x=>x.id===id); if(!b) return;
+  const info=payInfo(b,type,id);
+  if(!info.amt){ toast(type==="custom"?"Nhập số tiền!":"Số tiền không hợp lệ!"); return; }
+  const paid=b.payments.reduce((a,p)=>a+p.amount,0);
+  if(paid+info.amt>b.totalAmt){ toast("Số tiền vượt quá tổng đơn ("+VND(b.totalAmt)+"). Kiểm tra lại.",4500); return; }
+  pendingPay={id,type};
+  $("pay-modal-text").innerHTML=`Xác nhận đã <b>${info.ask}</b> <b>${VND(info.amt)}</b> cho đơn <b>${esc(id)}</b>?<div class="pay-modal-sub">Sau khi xác nhận: đã nhận ${VND(paid+info.amt)} / tổng ${VND(b.totalAmt)}${paid+info.amt>=b.totalAmt?" (đã đủ)":", còn "+VND(b.totalAmt-paid-info.amt)}.</div>`;
+  $("pay-modal").classList.add("show");
+}
+function closePay(){ pendingPay=null; $("pay-modal").classList.remove("show"); }
+function okPay(){ const p=pendingPay; closePay(); if(p) confirmPayment(p.id,p.type); }
 function confirmPayment(id, type) {
   const b=bookings.find(x=>x.id===id); if(!b) return;
   const today=new Date().toLocaleDateString("vi-VN");
-  let amt=0, label="";
-  if(type==="coc50"){ amt=Math.round(b.totalAmt*0.5); label="Cọc 50%"; }
-  else if(type==="full"){ amt=b.totalAmt; label="Thanh toán full"; }
-  else if(type==="remaining"){
-    const paid=b.payments.reduce((a,p)=>a+p.amount,0);
-    amt=b.totalAmt-paid; label="Thanh toán nốt";
-  }
-  else if(type==="custom"){
-    amt=parseNum($("custom-coc-"+id)?$("custom-coc-"+id).value:"");
-    label="Tiền cọc";
-    if(!amt){ toast("Nhập số tiền!"); return; }
-  }
+  const {amt,label}=payInfo(b,type,id);
   if(!amt){ toast("Số tiền không hợp lệ!"); return; }
+  const before=b.payments.reduce((a,p)=>a+p.amount,0);
+  if(before+amt>b.totalAmt){ toast("Số tiền vượt quá tổng đơn. Kiểm tra lại.",4500); return; }
   b.payments.push({amount:amt,type:label,date:today});
   const totalPaid=b.payments.reduce((a,p)=>a+p.amount,0);
   if(b.status!=="completed") b.status=totalPaid>=b.totalAmt?"done":totalPaid>0?"partial":"pending";
@@ -1700,16 +1739,22 @@ async function copySlipImage(id){
   }catch(e){ console.error(e); toast("Chưa copy được ảnh: "+e.message+". Thử nút Lưu ảnh."); }
 }
 
-// Phiếu điều hành: mỗi dịch vụ 1 tin nhắn riêng gửi cho đúng đối tác
-function copyDH(id, si){
+// Tin gửi đối tác: mỗi dịch vụ một tin, có bản Email và bản Zalo. Không có ghi chú của dịch vụ.
+function partnerBody(b,s){
+  return `ĐH: ${b.id}\nTên dịch vụ: ${s.name}`+zaloQty(s,true)+zaloDates(s)
+    +`\nDanh sách khách hàng:\n${guestBullets(b).join("\n")}\nNet: ${VNDn(s.totalNet)}đ`;
+}
+function copyPartner(id, si, kind){
   const b=bookings.find(x=>x.id===id); if(!b) return;
   const s=b.svcs[si]; if(!s) return;
   if(!s.totalNet){ toast(BK.netState(s)==="partial"?"Chưa nhập đủ giá net cho các nhóm của dịch vụ này":"Chưa nhập giá net cho dịch vụ này"); return; }
-  let t=(s.partner?`Gửi: ${s.partner}\n`:"")+`ĐH: ${b.id}\n${s.name}`;
-  t+=zaloQty(s,true);
-  t+=zaloDates(s);
-  t+=`\nDanh sách:\n${guestBullets(b).join("\n")}\n\nNet: ${VNDn(s.totalNet)}đ`;
-  copyToClipboard(t,"Đã copy phiếu điều hành!");
+  let t;
+  if(kind==="email"){
+    t=(s.partner?`Kính gửi quý đối tác: ${s.partner}`:"Kính gửi quý đối tác,")+"\n\nSerene Travel xin được xác nhận đặt dịch vụ như sau\n"+partnerBody(b,s)+"\n\nSerene Travel xin chân thành cảm ơn\nTrân trọng";
+  } else {
+    t="SERENE TRAVEL XÁC NHẬN ĐẶT DỊCH VỤ:\n"+partnerBody(b,s);
+  }
+  copyToClipboard(t,kind==="email"?"Đã copy nội dung Email!":"Đã copy tin Zalo!");
 }
 
 // Qua ngày check out cuối cùng thì đơn tự chuyển "Đã hoàn thành"
