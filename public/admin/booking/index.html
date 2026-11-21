@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&display=swap" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/tabler-icons.min.css" rel="stylesheet">
 <script src="/vendor/html2canvas.min.js"></script>
+<script src="/admin/booking/calc.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#F0F4F8;min-height:100vh;font-family:"Be Vietnam Pro",sans-serif;color:#2C3E50;font-size:14px}
@@ -134,7 +135,7 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
 .pay-opt-icon{font-size:20px;margin-bottom:4px}
 .pay-opt-name{font-size:12px;font-weight:600;color:#2A5F78;margin-bottom:2px}
 .pay-opt-desc{font-size:10px;color:#7A8FA0;line-height:1.4}
-.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#2A5F78;color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;font-weight:500;opacity:0;transition:opacity .25s;pointer-events:none;z-index:9999;white-space:nowrap}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#2A5F78;color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;font-weight:500;opacity:0;transition:opacity .25s;pointer-events:none;z-index:9999;max-width:92vw;text-align:center}
 .toast.show{opacity:1}
 .stat-item{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:.5px solid rgba(58,125,153,.1)}
 /* STATUS BADGES */
@@ -199,6 +200,30 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
 .a5-notebox{font-size:.62em;color:#5A6F7D;margin-top:.6em;white-space:pre-line;line-height:1.35}
 .a5-foot{text-align:center;font-size:.6em;color:#7A8FA0;padding-top:.6em;margin-top:.7em;border-top:1px solid rgba(58,125,153,.2);position:relative}
 .a5-foot b{color:#2A5F78;letter-spacing:.12em}
+
+/* Chọn loại dịch vụ, nhóm người, thiết lập loại và đơn vị */
+.cat-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.cat-chip{font-family:inherit;font-size:12px;padding:6px 11px;border-radius:18px;border:.5px solid rgba(58,125,153,.3);background:#fff;color:#2A5F78;cursor:pointer}
+.cat-chip.on{background:#3A7D99;color:#fff;border-color:#3A7D99}
+.cat-hint{font-size:11.5px;color:#7A8FA0;margin:2px 0 8px}
+.grp-card{background:#fff;border:.5px solid rgba(58,125,153,.2);border-radius:9px;padding:8px 10px;margin-bottom:8px}
+.grp-top{display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:600;color:#2A5F78;margin-bottom:6px}
+.grp-sub{color:#7A8FA0;font-weight:500}
+.grp-grid{display:grid;grid-template-columns:.7fr 1fr 1fr;gap:6px}
+.grp-grid label{font-size:10px;margin-bottom:2px}
+.grp-grid input{padding:7px 8px;font-size:12.5px}
+.cat-item,.unit-item{padding:10px 0;border-bottom:.5px solid rgba(58,125,153,.1)}
+.cat-item-top,.unit-top{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}
+.cat-item-sel{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cat-item-sel select{font-size:12px;padding:7px 8px}
+.unit-cats{display:flex;flex-wrap:wrap;gap:4px 12px}
+.chk{display:flex;align-items:center;gap:5px;font-size:11.5px;color:#2C3E50;margin:0;font-weight:400;cursor:pointer}
+.chk input{width:auto;padding:0}
+.svc-tbl td .x{font-size:10px;color:#7A8FA0}
+.a5-x{font-size:.8em;color:#7A8FA0}
+.a5-tbl tr.grp td{border-bottom:none;padding-bottom:.1em}
+.a5-tbl tr.sub td{padding:.16em .4em;border-bottom:1px dashed rgba(58,125,153,.18)}
+.a5-tbl tr.sub td.sl{padding-left:1.4em;color:#5A6F7D}
 </style>
 </head>
 <body>
@@ -265,19 +290,34 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
 
 <div class="panel" id="panel-stats">
   <div class="stat-grid" id="stat-grid"></div>
+  <div class="card" id="stat-cats" style="display:none"></div>
   <button class="btn-outline" style="width:100%;margin-bottom:.75rem" onclick="downloadCSV()"><i class="ti ti-file-spreadsheet"></i>Tải bảng đơn hàng (CSV, mở bằng Excel / Google Sheets)</button>
   <div class="card" id="stat-list"></div>
 </div>
 
 <div class="panel" id="panel-settings">
   <div class="card">
-    <div class="sec-title"><i class="ti ti-ruler"></i>Đơn vị tự thêm</div>
+    <div class="sec-title"><i class="ti ti-category"></i>Loại dịch vụ</div>
+    <div id="cat-list"></div>
+    <div style="margin-top:10px;padding-top:10px;border-top:.5px dashed rgba(58,125,153,.25)">
+      <label>Thêm loại mới</label>
+      <input id="cat-new-name" maxlength="30" placeholder="Tên loại (VD: Spa, Chụp ảnh)" style="margin-bottom:8px">
+      <div class="cat-item-sel" style="margin-bottom:8px">
+        <div><label>Cách nhập ngày</label><select id="cat-new-date"></select></div>
+        <div><label>Nhóm người</label><select id="cat-new-people"></select></div>
+      </div>
+      <button class="btn-outline" style="width:100%" onclick="catAdd()"><i class="ti ti-plus"></i>Thêm loại</button>
+    </div>
+    <div style="font-size:11px;color:#7A8FA0;margin-top:6px">Tên loại chỉ hiện trong trang này, không in lên phiếu. Đổi cách nhập ngày hoặc nhóm người chỉ áp dụng cho dịch vụ tạo từ sau; các đơn đã tạo giữ nguyên.</div>
+  </div>
+  <div class="card">
+    <div class="sec-title"><i class="ti ti-ruler"></i>Đơn vị</div>
     <div id="unit-list"></div>
     <div style="display:flex;gap:8px;margin-top:8px">
       <input id="unit-new" maxlength="20" placeholder="Đơn vị mới (VD: suất, bàn, gói)" style="flex:1">
       <button class="btn-outline" onclick="addUnitFromSettings()"><i class="ti ti-plus"></i>Thêm</button>
     </div>
-    <div style="font-size:11px;color:#7A8FA0;margin-top:6px">Đơn vị có sẵn (vé, phòng, đêm...) không xóa được. Xóa đơn vị tự thêm không làm đổi chữ trong các đơn đã tạo.</div>
+    <div style="font-size:11px;color:#7A8FA0;margin-top:6px">Bỏ tích ở loại nào thì đơn vị đó không hiện trong danh sách chọn của loại ấy. Đơn vị có sẵn (vé, phòng, đêm...) không xóa được. Xóa đơn vị tự thêm không làm đổi chữ trong các đơn đã tạo.</div>
   </div>
   <div class="card">
     <div class="sec-title"><i class="ti ti-note"></i>Ghi chú cuối phiếu</div>
@@ -405,9 +445,9 @@ async function createRemote(b) {
   return false;
 }
 
-function toast(msg){
+function toast(msg, ms){
   const t=$("toast"); t.textContent=msg; t.classList.add("show");
-  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove("show"),2500);
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove("show"),ms||2500);
 }
 
 function switchTab(tab){
@@ -436,14 +476,17 @@ function fmtDate6(raw) {
 function diffDays(d1,d2) {
   return Math.round((d2-d1)/(1000*60*60*24));
 }
+function svcEl(i){ return document.querySelector('[data-svc="'+i+'"]'); }
 function onDateInput(i, field) {
   const el = $(field+"-"+i);
   const raw = el.value.replace(/\D/g,"");
   if (raw.length > 6) { el.value = el.value.slice(0,-1); return; }
   el.value = fmtDate6(raw);
-  autoFillNights(i);
+  const w = svcEl(i);
+  if (w && w.dataset.legacy==="1") autoFillNights(i); else updateNights(i);
   calcTotal();
 }
+// Dịch vụ của đơn cũ: cột 2 tự điền số đêm như trước
 function autoFillNights(i) {
   const d1raw = $("sd-"+i) ? $("sd-"+i).value.replace(/\D/g,"") : "";
   const d2raw = $("se-"+i) ? $("se-"+i).value.replace(/\D/g,"") : "";
@@ -452,7 +495,6 @@ function autoFillNights(i) {
     if (dt1&&dt2) {
       const diff=diffDays(dt1,dt2);
       if (diff>0) {
-        // has nights -> fill col2 with nights
         const c2el=$("sc2-"+i);
         if(c2el) { c2el.value=diff; }
         const u2el=$("su2-"+i);
@@ -470,55 +512,89 @@ function updateNightsBadge(i,nights) {
   if(nights>0) { badge.textContent=nights+" đêm"; badge.style.display="block"; }
   else { badge.textContent=""; badge.style.display="none"; }
 }
-function calcTotal(){
-  let total=0;
-  document.querySelectorAll("[data-svc]").forEach(el=>{
-    const i=el.dataset.svc;
-    const p=parseNum($("sp-"+i).value);
-    const q1=parseInt($("sc1-"+i).value)||1;
-    const c2el=$("sc2-"+i);
-    const q2=c2el&&c2el.value.trim()!==""?parseInt(c2el.value)||1:1;
-    const hasC2=c2el&&c2el.value.trim()!=="";
-    const sub=hasC2?p*q1*q2:p*q1;
-    total+=sub;
-    $("ss-"+i).textContent="Thành tiền: "+VNDn(sub)+" đ";
-    calcProfit(i);
+// Loại nhận/trả (khách sạn): số đêm tự tính từ ngày nhận và ngày trả
+function updateNights(i){
+  const w=svcEl(i); if(!w||w.dataset.mode!=="range") return;
+  updateNightsBadge(i, BK.nightsBetween($("sd-"+i)?$("sd-"+i).value:"", $("se-"+i)?$("se-"+i).value:""));
+}
+function tripChanged(i){
+  const box=$("seb-"+i), round=$("st-"+i).value==="round";
+  if(box) box.style.display=round?"":"none";
+  calcTotal();
+}
+function intVal(id){ const e=$(id); return e?(parseInt(e.value)||0):0; }
+function numVal(id){ const e=$(id); return e?parseNum(e.value):0; }
+// Tính nhanh khi đang gõ (chưa báo lỗi; lỗi chỉ báo lúc bấm tạo đơn)
+function previewSvc(i){
+  const w=svcEl(i);
+  if(w.dataset.legacy==="1"){
+    const price=numVal("sp-"+i), q1=parseInt($("sc1-"+i).value)||1;
+    const c2=$("sc2-"+i), has2=c2&&c2.value.trim()!=="";
+    const units=has2?q1*(parseInt(c2.value)||1):q1;
+    const net=numVal("snet-"+i);
+    return {total:price*units, totalNet:net>0?net*units:null, hint:net>0?("Tổng net: "+VNDn(net)+" x "+units+" = "+VNDn(net*units)+" đ"):""};
+  }
+  if(!w.dataset.cat) return {total:0,totalNet:null,hint:""};
+  if(w.dataset.people==="none"){
+    const qty=intVal("sc1-"+i), price=numVal("sp-"+i), net=numVal("snet-"+i);
+    const nights=w.dataset.mode==="range"?BK.nightsBetween($("sd-"+i).value,$("se-"+i)?$("se-"+i).value:""):1;
+    const units=qty*nights;
+    return {total:price*units, totalNet:net>0?net*units:null, hint:net>0?("Tổng net: "+VNDn(net)+" x "+units+" = "+VNDn(net*units)+" đ"):""};
+  }
+  let total=0, tn=0, all=true, any=false, cnt=0;
+  BK.groupKeys(w.dataset.people).forEach(k=>{
+    const q=intVal("gq-"+i+"-"+k), p=numVal("gp-"+i+"-"+k), n=numVal("gn-"+i+"-"+k);
+    const s=$("gs-"+i+"-"+k); if(s) s.textContent=q>0?("= "+VNDn(q*p)+" đ"):"";
+    if(q>0){ cnt++; total+=q*p; if(n>0){ tn+=n*q; any=true; } else all=false; }
   });
-  $("grand-total").textContent=VNDn(total)+" đ";
+  const full=cnt>0&&all;
+  return {total, totalNet:full?tn:null, hint:(any&&!full)?"Chưa nhập đủ giá net cho các nhóm nên chưa tính lợi nhuận.":(full?("Tổng net: "+VNDn(tn)+" đ"):"")};
 }
-
-function unitsOf(i){
-  const q1=parseInt($("sc1-"+i)?$("sc1-"+i).value:1)||1;
-  const c2el=$("sc2-"+i);
-  const hasC2=c2el&&c2el.value.trim()!=="";
-  return hasC2?q1*(parseInt(c2el.value)||1):q1;
-}
-// Giá net nhập là ĐƠN GIÁ, nhân với số lượng ra tổng net
-function calcProfit(i) {
-  const price = parseNum($("sp-"+i)?$("sp-"+i).value:"");
-  const unitNet = parseNum($("snet-"+i)?$("snet-"+i).value:"");
-  const units = unitsOf(i);
-  const totalSell = price*units;
-  const totalNet = unitNet*units;
-  const hint = $("snt-"+i);
-  if(hint) hint.textContent = unitNet>0 ? ("Tổng net: "+VNDn(unitNet)+" x "+units+" = "+VNDn(totalNet)+" đ") : "";
-  const profEl = $("spro-"+i);
+function calcProfit(i, pv) {
+  pv=pv||previewSvc(i);
+  const hint=$("snt-"+i); if(hint) hint.textContent=pv.hint||"";
+  const profEl=$("spro-"+i);
   if(!profEl) return;
-  if(unitNet>0 && price>0) {
-    const profit = totalSell - totalNet;
+  if(pv.totalNet!=null && pv.total>0) {
+    const profit = pv.total - pv.totalNet;
     profEl.style.display="block";
     profEl.textContent = (profit>=0?"+ ":"- ")+VNDn(Math.abs(profit))+" đ";
     profEl.style.background = profit>=0?"#EDF7F2":"#FFE0E0";
     profEl.style.color = profit>=0?"#2E7D32":"#B85C5C";
   } else { profEl.style.display="none"; }
 }
+function calcTotal(){
+  let total=0;
+  document.querySelectorAll("[data-svc]").forEach(el=>{
+    const i=el.dataset.svc, pv=previewSvc(i);
+    total+=pv.total;
+    $("ss-"+i).textContent="Thành tiền: "+VNDn(pv.total)+" đ";
+    calcProfit(i,pv);
+  });
+  $("grand-total").textContent=VNDn(total)+" đ";
+}
 
 const UNITS1=["vé","phòng","chiếc","căn","người"], UNITS2=["đêm","lần","chuyến","ngày","chiều"];
 let customUnits=[];
+// Loại dịch vụ và đơn vị ẩn theo loại (thiết lập, lưu trong D1). unitHide[đơn vị] = danh sách mã loại KHÔNG hiện đơn vị đó.
+let catList=BK.DEFAULT_CATS.map(c=>Object.assign({},c));
+let unitHide={};
 // Danh sách đơn vị = đơn vị có sẵn + đơn vị tự thêm (lưu trong D1, dùng được ở mọi máy)
 function unitOpts(defaults, selected){
   const list=[...defaults];
   customUnits.forEach(u=>{ if(!list.includes(u)) list.push(u); });
+  if(selected && !list.includes(selected)) list.push(selected);
+  return list.map(u=>`<option value="${escAttr(u)}"${selected===u?" selected":""}>${escAttr(u)}</option>`).join("")+'<option value="__add__">+ Thêm đơn vị khác...</option>';
+}
+function allUnits(){ return [...new Set([...UNITS1,...UNITS2,...customUnits])]; }
+function unitsForCat(catId){
+  const l=allUnits().filter(u=>!(unitHide[u]||[]).includes(catId));
+  return l.length?l:allUnits();
+}
+const DEFAULT_UNIT={hotel:"phòng",tour:"vé",xe:"chiếc",ve:"vé",vui:"vé",an:"người"};
+function defaultUnit(catId){ const l=unitsForCat(catId), d=DEFAULT_UNIT[catId]; return d&&l.includes(d)?d:l[0]; }
+function unitOptsCat(catId, selected){
+  const list=unitsForCat(catId);
   if(selected && !list.includes(selected)) list.push(selected);
   return list.map(u=>`<option value="${escAttr(u)}"${selected===u?" selected":""}>${escAttr(u)}</option>`).join("")+'<option value="__add__">+ Thêm đơn vị khác...</option>';
 }
@@ -528,9 +604,14 @@ function refreshUnitSelects(){
     sel.innerHTML=unitOpts(sel.dataset.def==="1"?UNITS1:UNITS2, cur);
     sel.value=cur; sel.dataset.prev=cur;
   });
+  document.querySelectorAll("select[data-ucat]").forEach(sel=>{
+    const cur=sel.value==="__add__"?(sel.dataset.prev||""):sel.value;
+    sel.innerHTML=unitOptsCat(sel.dataset.ucat, cur);
+    sel.value=cur; sel.dataset.prev=cur;
+  });
 }
 async function loadUnits(){
-  try{ const d=await apiBooking("GET", undefined, "/api/booking-units"); customUnits=Array.isArray(d.units)?d.units:[]; refreshUnitSelects(); }
+  try{ const d=await apiBooking("GET", undefined, "/api/booking-units"); customUnits=Array.isArray(d.units)?d.units:[]; refreshUnitSelects(); renderUnitList(); }
   catch(e){ console.warn("Chưa tải được đơn vị tự thêm:", e.message); }
 }
 // Thêm đơn vị: trả về tên cuối cùng (có thể là đơn vị đã có) hoặc null nếu tên không hợp lệ
@@ -562,27 +643,107 @@ async function removeUnit(name){
   try{ await apiBooking("DELETE", undefined, "/api/booking-units?name="+encodeURIComponent(name)); }
   catch(e){ showSyncStatus("⚠️ Xóa chưa được: "+e.message, true); return; }
   customUnits=customUnits.filter(u=>u!==name);
+  if(unitHide[name]){ delete unitHide[name]; saveSetting({unitHide}); }
   refreshUnitSelects(); renderUnitList(); toast("Đã xóa đơn vị: "+name);
 }
-function renderUnitList(){
-  const el=$("unit-list"); if(!el) return;
-  el.innerHTML=customUnits.length?customUnits.map(u=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:.5px solid rgba(58,125,153,.1)"><span>${escAttr(u)}</span><button class="btn-del" data-unit="${escAttr(u)}" onclick="removeUnit(this.dataset.unit)">✕</button></div>`).join(""):'<div class="no-pay">Chưa có đơn vị tự thêm nào</div>';
-}
-// ── Thiết lập: ghi chú cuối phiếu ──
+// ── Thiết lập: loại dịch vụ, đơn vị theo loại, ghi chú cuối phiếu ──
 let slipNote="";
 async function loadSettings(){
-  try{ const d=await apiBooking("GET", undefined, "/api/booking-settings"); slipNote=(d.settings&&d.settings.slipNote)||""; }
+  try{
+    const d=await apiBooking("GET", undefined, "/api/booking-settings");
+    const st=d.settings||{};
+    slipNote=st.slipNote||"";
+    catList=BK.normalizeCats(st.categories);
+    unitHide=st.unitHide&&typeof st.unitHide==="object"?st.unitHide:{};
+    refreshAllChips(); refreshUnitSelects();
+  }
   catch(e){ console.warn("Chưa tải được thiết lập:", e.message); }
 }
+async function saveSetting(patch, okMsg){
+  try{ await apiBooking("PUT", patch, "/api/booking-settings"); if(okMsg) toast(okMsg); return true; }
+  catch(e){ showSyncStatus("⚠️ Lưu thiết lập chưa được: "+e.message, true); return false; }
+}
+const DATE_MODE_LBL={single:"Một ngày (ngày đi)", range:"Nhận và trả (tính số đêm)", trip:"Một chiều hoặc khứ hồi"};
+const PEOPLE_LBL={"none":"Chỉ số lượng, không chia nhóm", "al-tre":"Người lớn + trẻ em", "al-tre-nct":"Người lớn + trẻ em + người cao tuổi"};
+function renderCatList(){
+  const el=$("cat-list"); if(!el) return;
+  const opts=(map,cur)=>Object.keys(map).map(k=>`<option value="${k}"${k===cur?" selected":""}>${map[k]}</option>`).join("");
+  el.innerHTML=catList.map((c,idx)=>`<div class="cat-item">
+    <div class="cat-item-top">
+      <input maxlength="30" value="${escAttr(c.name)}" onchange="catUpdate(${idx},'name',this.value)">
+      <button class="btn-del" onclick="catRemove(${idx})" title="Xóa loại"><i class="ti ti-trash"></i></button>
+    </div>
+    <div class="cat-item-sel">
+      <div><label>Cách nhập ngày</label><select onchange="catUpdate(${idx},'dateMode',this.value)">${opts(DATE_MODE_LBL,c.dateMode)}</select></div>
+      <div><label>Nhóm người</label><select onchange="catUpdate(${idx},'people',this.value)">${opts(PEOPLE_LBL,c.people)}</select></div>
+    </div></div>`).join("");
+  const dm=$("cat-new-date"), pp=$("cat-new-people");
+  if(dm&&!dm.options.length) dm.innerHTML=opts(DATE_MODE_LBL,"single");
+  if(pp&&!pp.options.length) pp.innerHTML=opts(PEOPLE_LBL,"none");
+}
+function catNameOk(name, exceptIdx){
+  if(!BK.validName(name)){ toast("Tên loại tối đa 30 ký tự, không dùng < > \" &", 4000); return false; }
+  const low=name.trim().replace(/\s+/g," ").toLowerCase();
+  if(catList.some((c,i)=>i!==exceptIdx&&c.name.toLowerCase()===low)){ toast("Đã có loại tên này", 4000); return false; }
+  return true;
+}
+async function catUpdate(idx,field,val){
+  const c=catList[idx]; if(!c) return;
+  const before=c[field];
+  if(field==="name"){ val=val.trim().replace(/\s+/g," "); if(!catNameOk(val,idx)){ renderCatList(); return; } }
+  if(val===before) return;
+  c[field]=val;
+  if(await saveSetting({categories:catList},"Đã lưu loại dịch vụ")){ refreshAllChips(); renderUnitList(); }
+  else { c[field]=before; }
+  renderCatList();
+}
+async function catAdd(){
+  const inp=$("cat-new-name"); const name=inp.value.trim().replace(/\s+/g," ");
+  if(!catNameOk(name,-1)) return;
+  if(catList.length>=20){ toast("Tối đa 20 loại dịch vụ", 4000); return; }
+  const nc={id:"c"+Date.now().toString(36), name, dateMode:$("cat-new-date").value, people:$("cat-new-people").value};
+  catList.push(nc);
+  if(await saveSetting({categories:catList},"Đã thêm loại: "+name)){ inp.value=""; refreshAllChips(); renderUnitList(); }
+  else catList.pop();
+  renderCatList();
+}
+async function catRemove(idx){
+  const c=catList[idx]; if(!c) return;
+  if(catList.length<=1){ toast("Phải giữ lại ít nhất 1 loại", 4000); return; }
+  if(!confirm("Xóa loại \""+c.name+"\" khỏi danh sách chọn? Các đơn đã tạo vẫn giữ nguyên.")) return;
+  const keep=catList.slice(); catList.splice(idx,1);
+  if(await saveSetting({categories:catList},"Đã xóa loại: "+c.name)){ refreshAllChips(); renderUnitList(); }
+  else catList=keep;
+  renderCatList();
+}
+
+function renderUnitList(){
+  const el=$("unit-list"); if(!el) return;
+  el.innerHTML=allUnits().map(u=>{
+    const custom=customUnits.includes(u), hid=unitHide[u]||[];
+    return `<div class="unit-item">
+      <div class="unit-top"><b>${escAttr(u)}</b>${custom?`<button class="btn-del" data-unit="${escAttr(u)}" onclick="removeUnit(this.dataset.unit)" style="width:26px;height:26px">✕</button>`:'<span style="font-size:10.5px;color:#A8BFCC">có sẵn</span>'}</div>
+      <div class="unit-cats">${catList.map(c=>`<label class="chk"><input type="checkbox" data-u="${escAttr(u)}" data-c="${escAttr(c.id)}"${hid.includes(c.id)?"":" checked"} onchange="toggleUnitCat(this)"><span>${escAttr(c.name)}</span></label>`).join("")}</div>
+    </div>`;
+  }).join("");
+}
+async function toggleUnitCat(cb){
+  const u=cb.dataset.u, cid=cb.dataset.c;
+  const before=JSON.stringify(unitHide);
+  const set=new Set(unitHide[u]||[]);
+  if(cb.checked) set.delete(cid); else set.add(cid);
+  if(set.size) unitHide[u]=[...set]; else delete unitHide[u];
+  if(await saveSetting({unitHide})) refreshUnitSelects();
+  else { unitHide=JSON.parse(before); renderUnitList(); }
+}
 function renderSettings(){
-  renderUnitList();
+  renderCatList(); renderUnitList();
   const ta=$("set-slip-note"); if(ta&&document.activeElement!==ta) ta.value=slipNote;
 }
 async function saveSlipNote(){
   const v=$("set-slip-note").value.trim();
   if(v.length>300){ toast("Ghi chú tối đa 300 ký tự"); return; }
-  try{ await apiBooking("PUT", {slipNote:v}, "/api/booking-settings"); slipNote=v; $("set-slip-note").value=v; toast("Đã lưu ghi chú cuối phiếu"); }
-  catch(e){ showSyncStatus("⚠️ Lưu ghi chú chưa được: "+e.message, true); }
+  if(await saveSetting({slipNote:v})){ slipNote=v; $("set-slip-note").value=v; toast("Đã lưu ghi chú cuối phiếu"); }
 }
 async function previewSlip(){
   const id=(selId&&bookings.find(b=>b.id===selId))?selId:(bookings.length?bookings[bookings.length-1].id:null);
@@ -598,31 +759,119 @@ async function previewSlip(){
 }
 
 function escAttr(v){ return String(v==null?"":v).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
-function addSvc(s){
-  svcCount++;
-  const i=svcCount;
-  const div=document.createElement("div");
-  div.className="svc-wrap"; div.setAttribute("data-svc",i);
-  const u1opts=unitOpts(UNITS1,s&&s.unit1);
-  const u2opts=unitOpts(UNITS2,s&&s.unit2);
-  div.innerHTML=`
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-    <div class="svc-label" style="margin-bottom:0">Dịch vụ ${i}</div>
-    <button class="btn-del" onclick="this.closest('[data-svc]').remove();calcTotal()" style="width:26px;height:26px">✕</button>
+
+// ── Chọn loại dịch vụ ──
+function catChipsHtml(i){
+  const w=svcEl(i), cur=w?w.dataset.cat:"";
+  const list=catList.slice();
+  if(cur && !list.some(c=>c.id===cur)) list.push({id:cur,name:(w.dataset.catname||cur)});
+  return list.map(c=>`<button type="button" class="cat-chip${c.id===cur?" on":""}" data-cid="${escAttr(c.id)}" onclick="pickCat(${i},this.dataset.cid)">${escAttr(c.name)}</button>`).join("");
+}
+function renderChips(i){ const el=$("scc-"+i); if(el) el.innerHTML=catChipsHtml(i); }
+function refreshAllChips(){ document.querySelectorAll("[data-svc]").forEach(w=>renderChips(w.dataset.svc)); }
+
+function dateBoxHtml(i,pre,label,val){
+  return `<div class="svc-date-box"><div class="svc-date-lbl">📅 ${label}</div>
+    <input class="svc-date-input" id="${pre}-${i}" placeholder="DDMMYY" maxlength="8" value="${escAttr(val||"")}" oninput="onDateInput(${i},'${pre}')"></div>`;
+}
+const NET_ROW_HTML=i=>`<div class="net-row">
+    <div class="net-input-wrap">
+      <span class="net-lbl">💵 Đơn giá net (đ) — tuỳ chọn</span>
+      <input id="snet-${i}" inputmode="numeric" placeholder="Để trống nếu chưa có" oninput="this.value=fmtInput(this.value);calcTotal()" style="padding:7px 10px;font-size:12px">
+    </div>
+    <div class="net-input-wrap" style="justify-content:flex-end">
+      <span class="net-lbl">📊 Lợi nhuận dịch vụ</span>
+      <div class="profit-bar" id="spro-${i}"></div>
+    </div>
   </div>
+  <div id="snt-${i}" style="font-size:11px;color:#7A8FA0;margin:-2px 0 6px"></div>`;
+
+// Ô nhập theo loại: cat = {id,name,dateMode,people}; vals = chữ đã có sẵn trong các ô (khi sửa đơn hoặc đổi loại)
+function renderBody(i, cat, vals){
+  vals=vals||{};
+  const w=svcEl(i);
+  w.dataset.legacy="0"; w.dataset.cat=cat.id; w.dataset.catname=cat.name||""; w.dataset.mode=cat.dateMode; w.dataset.people=cat.people;
+  const mode=cat.dateMode, people=cat.people, v=x=>escAttr(x==null?"":x);
+  const unit=vals.unit||defaultUnit(cat.id);
+  let dates="";
+  if(mode==="single") dates=`<div class="svc-date-row" style="grid-template-columns:1fr">${dateBoxHtml(i,"sd","Ngày đi",vals.dateIn)}</div>`;
+  else if(mode==="range") dates=`<div class="svc-date-row">${dateBoxHtml(i,"sd","Ngày nhận phòng",vals.dateIn)}${dateBoxHtml(i,"se","Ngày trả phòng",vals.dateOut)}</div><div class="svc-nights-badge" id="snb-${i}" style="display:none;margin:-4px 0 8px"></div>`;
+  else {
+    const round=vals.trip==="round";
+    dates=`<div style="margin-bottom:8px"><label>Chiều đi / về</label><select id="st-${i}" onchange="tripChanged(${i})"><option value="oneway"${round?"":" selected"}>Một chiều</option><option value="round"${round?" selected":""}>Khứ hồi</option></select></div>
+    <div class="svc-date-row">${dateBoxHtml(i,"sd","Ngày đi",vals.dateIn)}<div id="seb-${i}"${round?"":' style="display:none"'}>${dateBoxHtml(i,"se","Ngày về",vals.dateOut)}</div></div>`;
+  }
+  const nameHtml=`<div style="margin-bottom:8px"><label>Tên dịch vụ</label><input id="sn-${i}" placeholder="VD: Phòng Deluxe Sea View" value="${v(vals.name)}"></div>`;
+  let body="";
+  if(people==="none"){
+    body=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:end;margin-bottom:6px">
+      <div><label>Số lượng</label><div class="svc-qty-row"><input id="sc1-${i}" type="number" min="1" value="${v(vals.qty!=null&&vals.qty!==""?vals.qty:1)}" oninput="calcTotal()" placeholder="1">
+        <select id="su1-${i}" data-ucat="${v(cat.id)}" data-prev="${v(unit)}" onchange="unitChanged(this)">${unitOptsCat(cat.id,unit)}</select></div></div>
+      <div><label>${mode==="range"?"Giá bán / đêm (đ)":"Giá bán (đ)"}</label><input id="sp-${i}" inputmode="numeric" placeholder="0" value="${v(vals.price)}" oninput="this.value=fmtInput(this.value);calcTotal()"></div>
+    </div>`+NET_ROW_HTML(i);
+  } else {
+    const lines=vals.lines||{};
+    body=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><label style="margin:0">Đơn vị</label>
+      <select id="su1-${i}" data-ucat="${v(cat.id)}" data-prev="${v(unit)}" onchange="unitChanged(this)" style="width:130px">${unitOptsCat(cat.id,unit)}</select></div>`
+    + BK.groupKeys(people).map(k=>{
+      const g=lines[k]||{};
+      return `<div class="grp-card"><div class="grp-top"><span>${BK.GROUPS[k]}</span><span id="gs-${i}-${k}" class="grp-sub"></span></div>
+        <div class="grp-grid">
+          <div><label>Số lượng</label><input id="gq-${i}-${k}" type="number" min="0" placeholder="0" value="${v(g.qty)}" oninput="calcTotal()"></div>
+          <div><label>Giá bán (đ)</label><input id="gp-${i}-${k}" inputmode="numeric" placeholder="0" value="${v(g.price)}" oninput="this.value=fmtInput(this.value);calcTotal()"></div>
+          <div><label>Giá net (đ)</label><input id="gn-${i}-${k}" inputmode="numeric" placeholder="Chưa có" value="${v(g.net)}" oninput="this.value=fmtInput(this.value);calcTotal()"></div>
+        </div></div>`;
+    }).join("")
+    + `<div class="net-row" style="grid-template-columns:1fr"><div class="net-input-wrap" style="justify-content:flex-end"><span class="net-lbl">📊 Lợi nhuận dịch vụ</span><div class="profit-bar" id="spro-${i}"></div></div></div>
+       <div id="snt-${i}" style="font-size:11px;color:#7A8FA0;margin:2px 0 6px"></div>`;
+  }
+  $("sb-"+i).innerHTML=dates+nameHtml+body;
+  if(mode==="range") updateNights(i);
+}
+// Chuyển dịch vụ đã lưu thành chữ cho các ô
+function svcToVals(s){
+  const f=n=>n?VNDn(n):"";
+  const v={name:s.name,dateIn:s.dateIn||"",dateOut:s.dateOut||"",trip:s.trip||"",unit:BK.isGroup(s)?s.unit:s.unit1};
+  if(BK.isGroup(s)){ v.lines={}; s.lines.forEach(l=>{ v.lines[l.k]={qty:l.qty,price:l.price==null?"":String(VNDn(l.price)),net:f(l.netPrice)}; }); }
+  else { v.qty=s.qty1; v.price=f(s.price); v.net=f(s.netPrice); }
+  return v;
+}
+// Lấy chữ đang có trong các ô để mang sang khi đổi loại
+function collectVals(i){
+  const w=svcEl(i), g=id=>{ const e=$(id); return e?e.value:undefined; };
+  const v={name:g("sn-"+i)||"", dateIn:g("sd-"+i)||"", dateOut:g("se-"+i)||"", unit:g("su1-"+i)||""};
+  if(v.unit==="__add__") v.unit="";
+  if(w.dataset.legacy==="1"||w.dataset.people==="none"){ v.qty=g("sc1-"+i); v.price=g("sp-"+i); v.net=g("snet-"+i); v.kind="single"; }
+  else if(w.dataset.cat){ v.kind="group"; v.lines={}; BK.groupKeys(w.dataset.people).forEach(k=>{ v.lines[k]={qty:g("gq-"+i+"-"+k),price:g("gp-"+i+"-"+k),net:g("gn-"+i+"-"+k)}; }); }
+  return v;
+}
+function pickCat(i,catId){
+  const w=svcEl(i), cat=BK.findCat(catList,catId);
+  if(!w||!cat||(w.dataset.cat===catId&&w.dataset.legacy!=="1")) return;
+  const had=collectVals(i), hadContent=!!(had.name||had.price||(had.lines&&Object.values(had.lines).some(l=>l.qty||l.price)));
+  const vals={name:had.name,dateIn:had.dateIn,unit:had.unit};
+  if(cat.dateMode!=="single") vals.dateOut=had.dateOut;
+  if(cat.dateMode==="trip") vals.trip=($("st-"+i)&&$("st-"+i).value)||"";
+  if(cat.people==="none"&&had.kind==="single"){ vals.qty=had.qty; vals.price=had.price; vals.net=had.net; }
+  if(cat.people!=="none"&&had.kind==="group"){ vals.lines={}; BK.groupKeys(cat.people).forEach(k=>{ if(had.lines[k]) vals.lines[k]=had.lines[k]; }); }
+  if(vals.unit&&!unitsForCat(cat.id).includes(vals.unit)) vals.unit="";
+  renderBody(i,cat,vals);
+  w.dataset.catname=cat.name;
+  renderChips(i); calcTotal();
+  if(hadContent) toast("Đã đổi loại. Hãy kiểm tra lại số lượng và giá.", 4000);
+}
+function legacyBodyHtml(i,s){
+  const u1opts=unitOpts(UNITS1,s&&s.unit1), u2opts=unitOpts(UNITS2,s&&s.unit2);
+  return `<div class="cat-hint">Dịch vụ của đơn cũ (tính là loại Xe), vẫn nhập theo cách cũ. Chọn một loại ở trên nếu muốn đổi sang cách nhập mới.</div>
   <div class="svc-date-row">
     <div class="svc-date-box">
       <div class="svc-date-lbl">📅 Ngày đi</div>
-      <input class="svc-date-input" id="sd-${i}" placeholder="DDMMYY" maxlength="8"
-        value="${s&&s.dateIn?s.dateIn:""}"
-        oninput="onDateInput(${i},'sd')">
+      <input class="svc-date-input" id="sd-${i}" placeholder="DDMMYY" maxlength="8" value="${s&&s.dateIn?escAttr(s.dateIn):""}" oninput="onDateInput(${i},'sd')">
       <div class="svc-nights-badge" id="snb-${i}" style="display:none"></div>
     </div>
     <div class="svc-date-box">
       <div class="svc-date-lbl">📅 Ngày về</div>
-      <input class="svc-date-input" id="se-${i}" placeholder="DDMMYY" maxlength="8"
-        value="${s&&s.dateOut?s.dateOut:""}"
-        oninput="onDateInput(${i},'se')">
+      <input class="svc-date-input" id="se-${i}" placeholder="DDMMYY" maxlength="8" value="${s&&s.dateOut?escAttr(s.dateOut):""}" oninput="onDateInput(${i},'se')">
     </div>
   </div>
   <div class="svc-grid">
@@ -646,44 +895,99 @@ function addSvc(s){
   <div class="net-row">
     <div class="net-input-wrap">
       <span class="net-lbl">💵 Đơn giá net (đ) — tuỳ chọn</span>
-      <input id="snet-${i}" inputmode="numeric" placeholder="Để trống nếu chưa có" value="${s&&s.netPrice?VNDn(s.netPrice):""}" oninput="this.value=fmtInput(this.value);calcProfit(${i})" style="padding:7px 10px;font-size:12px;border:.5px solid rgba(58,125,153,.2);border-radius:7px;background:#fff;color:#2C3E50;font-family:inherit">
+      <input id="snet-${i}" inputmode="numeric" placeholder="Để trống nếu chưa có" value="${s&&s.netPrice?VNDn(s.netPrice):""}" oninput="this.value=fmtInput(this.value);calcProfit(${i})" style="padding:7px 10px;font-size:12px">
     </div>
     <div class="net-input-wrap" style="justify-content:flex-end">
       <span class="net-lbl">📊 Lợi nhuận dịch vụ</span>
       <div class="profit-bar" id="spro-${i}"></div>
     </div>
   </div>
-  <div id="snt-${i}" style="font-size:11px;color:#7A8FA0;margin:-2px 0 6px"></div>
+  <div id="snt-${i}" style="font-size:11px;color:#7A8FA0;margin:-2px 0 6px"></div>`;
+}
+function addSvc(s){
+  svcCount++;
+  const i=svcCount;
+  const legacy=!!s&&BK.isLegacy(s);
+  const div=document.createElement("div");
+  div.className="svc-wrap"; div.setAttribute("data-svc",i);
+  div.dataset.legacy=legacy?"1":"0";
+  div.dataset.cat=(s&&!legacy)?s.catId:"";
+  div.dataset.catname=(s&&!legacy)?(s.cat||""):"";
+  div.dataset.mode=(s&&!legacy)?s.dateMode:"";
+  div.dataset.people=(s&&!legacy)?s.people:"";
+  div.innerHTML=`
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <div class="svc-label" style="margin-bottom:0">Dịch vụ ${i}</div>
+    <button class="btn-del" onclick="this.closest('[data-svc]').remove();calcTotal()" style="width:26px;height:26px">✕</button>
+  </div>
+  <div class="cat-chips" id="scc-${i}"></div>
+  <div id="sb-${i}"></div>
   <div class="svc-sub" id="ss-${i}">Thành tiền: 0 đ</div>`;
   $("svc-container").appendChild(div);
-  if(s&&s.dateIn&&s.dateOut){ const dt1=parseDate6(s.dateIn), dt2=parseDate6(s.dateOut); if(dt1&&dt2&&diffDays(dt1,dt2)>0) updateNightsBadge(i,diffDays(dt1,dt2)); }
+  renderChips(i);
+  if(legacy){
+    $("sb-"+i).innerHTML=legacyBodyHtml(i,s);
+    if(s.dateIn&&s.dateOut){ const dt1=parseDate6(s.dateIn), dt2=parseDate6(s.dateOut); if(dt1&&dt2&&diffDays(dt1,dt2)>0) updateNightsBadge(i,diffDays(dt1,dt2)); }
+  } else if(div.dataset.cat){
+    renderBody(i,{id:s.catId,name:s.cat,dateMode:s.dateMode,people:s.people},svcToVals(s));
+  } else {
+    $("sb-"+i).innerHTML='<div class="cat-hint">Chọn loại dịch vụ ở trên để nhập tiếp.</div>';
+  }
   calcTotal();
 }
 
 // Payment preview removed - now handled in detail view
 
 let editingId = null;
+function readLegacySvc(i){
+  const nm=$("sn-"+i).value.trim(), p=parseNum($("sp-"+i).value);
+  const q1=parseInt($("sc1-"+i).value)||1;
+  const u1=$("su1-"+i)?$("su1-"+i).value:"người";
+  const c2el=$("sc2-"+i);
+  const hasC2=c2el&&c2el.value.trim()!=="";
+  const q2=hasC2?(parseInt(c2el.value)||1):null;
+  const u2=hasC2&&$("su2-"+i)?$("su2-"+i).value:"đêm";
+  const dateIn=$("sd-"+i)?$("sd-"+i).value:"";
+  const dateOut=$("se-"+i)?$("se-"+i).value:"";
+  const unitNet = parseNum($("snet-"+i)?$("snet-"+i).value:"");
+  const units = hasC2?q1*q2:q1;
+  const netPrice = unitNet>0?unitNet:null;
+  const totalNet = unitNet>0?unitNet*units:null;
+  const sub=p*units;
+  if(nm&&p>0) return {name:nm,price:p,netPrice,totalNet,qty1:q1,unit1:u1,qty2:q2,unit2:u2,dateIn,dateOut,total:sub};
+  return null;
+}
+function formOf(i){
+  const w=svcEl(i), g=id=>{ const e=$(id); return e?e.value:""; };
+  const f={catId:w.dataset.cat, catName:w.dataset.catname||"", dateMode:w.dataset.mode, people:w.dataset.people,
+    name:g("sn-"+i), dateIn:g("sd-"+i), dateOut:g("se-"+i), trip:g("st-"+i), unit:g("su1-"+i)};
+  if(f.unit==="__add__") f.unit="";
+  if(f.people==="none"){ f.qty=intVal("sc1-"+i); f.price=numVal("sp-"+i); f.net=numVal("snet-"+i); }
+  else { f.lines={}; BK.groupKeys(f.people).forEach(k=>{
+    const raw=g("gp-"+i+"-"+k);
+    f.lines[k]={qty:intVal("gq-"+i+"-"+k), price:raw.trim()===""?null:parseNum(raw), net:numVal("gn-"+i+"-"+k)};
+  }); }
+  return f;
+}
+function formIsBlank(f){
+  if(f.name.trim()) return false;
+  if(f.people==="none") return !(f.price>0);
+  return !Object.values(f.lines).some(l=>l.qty>0||l.price>0);
+}
+// Trả về {svcs, error}. Dịch vụ để trống hoàn toàn thì bỏ qua; nhập dở thì báo lỗi, không lưu thiếu.
 function readSvcs(){
-  const svcs=[];
-  document.querySelectorAll("[data-svc]").forEach(el=>{
+  const svcs=[]; let error="";
+  for(const el of document.querySelectorAll("[data-svc]")){
     const i=el.dataset.svc;
-    const nm=$("sn-"+i).value.trim(), p=parseNum($("sp-"+i).value);
-    const q1=parseInt($("sc1-"+i).value)||1;
-    const u1=$("su1-"+i)?$("su1-"+i).value:"người";
-    const c2el=$("sc2-"+i);
-    const hasC2=c2el&&c2el.value.trim()!=="";
-    const q2=hasC2?(parseInt(c2el.value)||1):null;
-    const u2=hasC2&&$("su2-"+i)?$("su2-"+i).value:"đêm";
-    const dateIn=$("sd-"+i)?$("sd-"+i).value:"";
-    const dateOut=$("se-"+i)?$("se-"+i).value:"";
-    const unitNet = parseNum($("snet-"+i)?$("snet-"+i).value:"");
-    const units = hasC2?q1*q2:q1;
-    const netPrice = unitNet>0?unitNet:null;
-    const totalNet = unitNet>0?unitNet*units:null;
-    const sub=p*units;
-    if(nm&&p>0) svcs.push({name:nm,price:p,netPrice,totalNet,qty1:q1,unit1:u1,qty2:q2,unit2:u2,dateIn,dateOut,total:sub});
-  });
-  return svcs;
+    if(el.dataset.legacy==="1"){ const s=readLegacySvc(i); if(s) svcs.push(s); continue; }
+    if(!el.dataset.cat) continue;
+    const f=formOf(i);
+    if(formIsBlank(f)) continue;
+    const r=BK.buildService(f);
+    if(!r.ok){ error="Dịch vụ "+i+": "+r.error; break; }
+    svcs.push(r.svc);
+  }
+  return {svcs,error};
 }
 function resetForm(){
   $("kh-name").value=""; $("kh-phone").value=""; $("kh-guests").value="";
@@ -713,8 +1017,10 @@ function cancelEdit(){
 async function createBooking(){
   const name=$("kh-name").value.trim(), phone=$("kh-phone").value.trim();
   if(!name||!phone){ toast("Nhập tên và SĐT!"); return; }
-  const svcs=readSvcs();
-  if(!svcs.length){ toast("Thêm ít nhất 1 dịch vụ có giá!"); return; }
+  const rd=readSvcs();
+  if(rd.error){ toast(rd.error, 5000); return; }
+  const svcs=rd.svcs;
+  if(!svcs.length){ toast("Chọn loại và nhập ít nhất 1 dịch vụ có giá!", 4000); return; }
   const totalAmt=svcs.reduce((a,s)=>a+s.total,0);
   const guests=$("kh-guests").value.trim();
   if(editingId){
@@ -766,11 +1072,7 @@ function showDetail(id){
   const paid=b.payments.reduce((a,p)=>a+p.amount,0), remain=b.totalAmt-paid;
   const qr=getQr(remain>0?remain:b.totalAmt, b.id);
   const gl=b.guests?b.guests.split("\n").filter(g=>g.trim()).map(g=>"• "+g.trim()).join("\n"):"—";
-  const svcRows=b.svcs.map(s=>{
-    const datePart=s.dateIn&&s.dateOut&&s.dateIn!==s.dateOut?`${s.dateIn}→${s.dateOut}`:s.dateIn?s.dateIn:"—";
-    const qtyPart=s.qty2!==null&&s.qty2!==undefined?`${s.qty1} ${s.unit1||""} x ${s.qty2} ${s.unit2||""}`:`${s.qty1} ${s.unit1||""}`;
-    return `<tr><td>${datePart}</td><td>${s.name}</td><td>${qtyPart}</td><td>${VNDn(s.price)}</td><td>${VNDn(s.total)}</td></tr>`;
-  }).join("");
+  const svcRows=b.svcs.map(screenRows).join("");
   const payHist=b.payments.length?b.payments.map(p=>`<div class="pay-hist-row"><div>${p.date}<span class="pay-tag">${p.type}</span></div><div style="font-weight:600;color:#4A9B6F">${VND(p.amount)}</div></div>`).join(""):'<div class="no-pay">Chưa có thanh toán nào</div>';
   const today=new Date().toISOString().split("T")[0];
 
@@ -834,25 +1136,14 @@ function showDetail(id){
 
   <div class="card">
     <div class="sec-title"><i class="ti ti-edit"></i>Cập nhật giá net</div>
-    ${b.svcs.map((s,si)=>`
-    <div style="margin-bottom:10px;padding-bottom:10px;border-bottom:.5px solid rgba(58,125,153,.1)">
-      <div style="font-size:12px;font-weight:600;color:#2A5F78;margin-bottom:6px">${s.name}</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <div><label style="font-size:11px;color:#7A8FA0;display:block;margin-bottom:3px">Giá bán: ${VND(s.total)}</label>
-        <div style="font-size:12px;color:#7A8FA0">đơn giá ${VNDn(s.price)} đ</div></div>
-        <div><label style="font-size:11px;color:#7A8FA0;display:block;margin-bottom:3px">💵 Đơn giá net (đ) x ${(s.qty2?s.qty1*s.qty2:s.qty1)||1}</label>
-        <input id="edit-net-${id}-${si}" inputmode="numeric" placeholder="Chưa có" value="${s.netPrice?VNDn(s.netPrice):""}"
-          oninput="this.value=fmtInput(this.value)"
-          style="padding:7px 10px;font-size:12px;font-family:inherit;border:.5px solid rgba(58,125,153,.2);border-radius:7px;background:#fff;color:#2C3E50;width:100%"></div>
-      </div>
-    </div>`).join("")}
+    ${b.svcs.map((s,si)=>netEditHtml(id,s,si)).join("")}
     <button class="btn-main" style="margin-top:4px" onclick="saveNetPrices('${id}')"><i class="ti ti-device-floppy"></i>Lưu giá net</button>
     <div id="profit-summary-${id}" style="margin-top:10px"></div>
   </div>
 
   <div class="card">
     <div class="sec-title"><i class="ti ti-send"></i>Phiếu điều hành gửi đối tác</div>
-    ${b.svcs.map((s,si)=>`<button class="btn-outline" style="width:100%;margin-bottom:6px;text-align:left" onclick="copyDH('${id}',${si})"><i class="ti ti-copy"></i>Copy ĐH: ${s.name}</button>`).join("")}
+    ${b.svcs.map((s,si)=>`<button class="btn-outline" style="width:100%;margin-bottom:6px;text-align:left" onclick="copyDH('${id}',${si})"><i class="ti ti-copy"></i>Copy ĐH: ${esc(s.name)}</button>`).join("")}
     <div style="font-size:11px;color:#7A8FA0;margin-top:2px">Mỗi dịch vụ là một tin nhắn riêng. Cần nhập giá net ở mục trên trước.</div>
   </div>
 
@@ -907,12 +1198,15 @@ function markComplete(id) {
 function saveNetPrices(id) {
   const b=bookings.find(x=>x.id===id); if(!b) return;
   b.svcs.forEach((s,si)=>{
-    const el=document.getElementById("edit-net-"+id+"-"+si);
-    if(!el) return;
-    const unitNet=parseNum(el.value)||0;
-    const units=(s.qty2?s.qty1*s.qty2:s.qty1)||1;
-    s.netPrice=unitNet>0?unitNet:null;
-    s.totalNet=unitNet>0?unitNet*units:null;
+    if(BK.isGroup(s)){
+      const nets={};
+      s.lines.forEach(l=>{ const el=document.getElementById("edit-net-"+id+"-"+si+"-"+l.k); nets[l.k]=el?parseNum(el.value):0; });
+      BK.applyNet(s,nets);
+    } else {
+      const el=document.getElementById("edit-net-"+id+"-"+si);
+      if(!el) return;
+      BK.applyNet(s,parseNum(el.value)||0);
+    }
   });
   saveBooking(b);
   showDetail(id);
@@ -975,6 +1269,74 @@ function qtyText(s){
   if(s.qty2!==null&&s.qty2!==undefined&&s.unit2!=="đêm") t+=` x ${s.qty2} ${s.unit2||""}`;
   return t.trim();
 }
+function tripLabel(s){ return s.trip==="round"?"Khứ hồi":s.trip==="oneway"?"Một chiều":""; }
+// Ngày hiển thị: main là ngày, extra là dòng nhỏ bên dưới (số đêm hoặc chiều đi/về)
+function dateParts(s){
+  const st=stayInfo(s);
+  if(!st) return {main:"—",extra:tripLabel(s)};
+  const main=(st.dIn===st.dOut||!st.dOut)?st.dIn:`${st.dIn} → ${st.dOut}`;
+  return {main, extra:s.trip?tripLabel(s):(st.nights?`${st.nights} đêm`:"")};
+}
+function priceTxt(p){ return p===0?"Miễn phí":VNDn(p); }
+// Bảng dịch vụ trong chi tiết đơn (trên màn hình)
+function screenRows(s){
+  const dp=dateParts(s);
+  const dateCell=`<td>${esc(dp.main)}${dp.extra?`<div style="font-size:10px;color:#7A8FA0">${esc(dp.extra)}</div>`:""}</td>`;
+  if(!BK.isGroup(s)){
+    const qtyPart=s.qty2!==null&&s.qty2!==undefined?`${s.qty1} ${s.unit1||""} x ${s.qty2} ${s.unit2||""}`:`${s.qty1} ${s.unit1||""}`;
+    return `<tr>${dateCell}<td>${esc(s.name)}</td><td>${esc(qtyPart)}</td><td>${VNDn(s.price)}</td><td>${VNDn(s.total)}</td></tr>`;
+  }
+  const head=`<tr>${dateCell}<td colspan="4" style="text-align:left;font-weight:600">${esc(s.name)}</td></tr>`;
+  const lines=BK.svcLines(s).map(l=>`<tr><td></td><td style="text-align:left;padding-left:10px;color:#5A6F7D">↳ ${esc(l.label)}</td><td>${esc((l.qty+" "+l.unit).trim())}</td><td>${priceTxt(l.price)}</td><td>${VNDn(l.total)}</td></tr>`).join("");
+  return head+lines;
+}
+// Dòng dịch vụ trên phiếu A5. Không in tên loại; nhóm có số lượng 0 đã không được lưu nên không hiện.
+function slipRows(s){
+  const dp=dateParts(s);
+  const dateHtml=esc(dp.main)+(dp.extra?`<div class="a5-x">${esc(dp.extra)}</div>`:"");
+  if(!BK.isGroup(s)) return `<tr><td class="n">${esc(s.name)}</td><td class="nw">${dateHtml}</td><td class="nw">${esc(qtyFull(s))}</td><td class="r">${VNDn(s.price)}</td><td class="r n">${VNDn(s.total)}</td></tr>`;
+  const head=`<tr class="grp"><td class="n">${esc(s.name)}</td><td class="nw">${dateHtml}</td><td colspan="3"></td></tr>`;
+  const lines=BK.svcLines(s).map(l=>`<tr class="sub"><td class="sl">${esc(l.label)}</td><td></td><td class="nw">${esc((l.qty+" "+l.unit).trim())}</td><td class="r">${priceTxt(l.price)}</td><td class="r n">${VNDn(l.total)}</td></tr>`).join("");
+  return head+lines;
+}
+// Phần ngày trong tin Zalo và phiếu điều hành
+function zaloDates(s){
+  const st=stayInfo(s);
+  if(s.trip){
+    let t="\n"+tripLabel(s);
+    if(st) t+=`\nNgày đi: ${st.dIn}`;
+    if(s.trip==="round"&&s.dateOut) t+=`\nNgày về: ${s.dateOut}`;
+    return t;
+  }
+  if(!st) return "";
+  if(s.dateMode==="single") return `\nNgày đi: ${st.dIn}`;
+  return `\nCheck in: ${st.dIn}\nCheck out: ${st.dOut}${st.nights?` (${st.nights} đêm)`:""}`;
+}
+function zaloQty(s, withNet){
+  if(BK.isGroup(s)) return "\nSố lượng:\n"+BK.svcLines(s).map(l=>`  • ${l.label}: ${l.qty} ${l.unit}`.trimEnd()+(withNet&&l.net?` x ${VNDn(l.net)}đ`:"")).join("\n");
+  return `\nSố lượng: ${qtyText(s)}`;
+}
+// Ô sửa giá net trong chi tiết đơn
+function netEditHtml(id,s,si){
+  const inp=(elId,val)=>`<input id="${elId}" inputmode="numeric" placeholder="Chưa có" value="${val?VNDn(val):""}" oninput="this.value=fmtInput(this.value)" style="padding:7px 10px;font-size:12px;font-family:inherit;border:.5px solid rgba(58,125,153,.2);border-radius:7px;background:#fff;color:#2C3E50;width:100%">`;
+  const lbl='font-size:11px;color:#7A8FA0;display:block;margin-bottom:3px';
+  let body;
+  if(BK.isGroup(s)){
+    body=BK.svcLines(s).map(l=>`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px">
+        <div><label style="${lbl}">${esc(l.label)}: ${l.qty} ${esc(l.unit)}</label>
+        <div style="font-size:12px;color:#7A8FA0">bán ${priceTxt(l.price)}${l.price===0?"":" đ"} = ${VNDn(l.total)} đ</div></div>
+        <div><label style="${lbl}">💵 Đơn giá net (đ) x ${l.qty}</label>${inp("edit-net-"+id+"-"+si+"-"+l.key,l.net)}</div>
+      </div>`).join("");
+  } else {
+    body=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div><label style="${lbl}">Giá bán: ${VND(s.total)}</label>
+        <div style="font-size:12px;color:#7A8FA0">đơn giá ${VNDn(s.price)} đ</div></div>
+        <div><label style="${lbl}">💵 Đơn giá net (đ) x ${BK.unitsOf(s)}</label>${inp("edit-net-"+id+"-"+si,s.netPrice)}</div>
+      </div>`;
+  }
+  return `<div style="margin-bottom:10px;padding-bottom:10px;border-bottom:.5px solid rgba(58,125,153,.1)">
+      <div style="font-size:12px;font-weight:600;color:#2A5F78;margin-bottom:6px">${esc(s.name)}</div>${body}</div>`;
+}
 function guestBullets(b){
   const list=b.guests?b.guests.split("\n").map(g=>g.trim()).filter(Boolean):[];
   return (list.length?list:[b.name]).map(g=>"  • "+g);
@@ -988,10 +1350,9 @@ function copyText(id){
   const paid=b.payments.reduce((a,p)=>a+p.amount,0);
   const gl=b.guests&&b.guests.trim()?"\nDanh sách khách:\n"+guestBullets(b).join("\n"):"";
   const blocks=b.svcs.map(s=>{
-    const st=stayInfo(s);
     let t=s.name;
-    if(st){ t+=`\nCheck in: ${st.dIn}\nCheck out: ${st.dOut}${st.nights?` (${st.nights} đêm)`:""}`; }
-    t+=`\nSố lượng: ${qtyText(s)}`;
+    t+=zaloDates(s);
+    t+=zaloQty(s,false);
     return t;
   }).join("\n\n");
   const payLine = paid>0?`\n💰 Cần đặt cọc: ${VND(paid)}`:"";
@@ -1018,11 +1379,7 @@ async function fetchQrDataUrl(amount, info){
 function slipHtml(b, qrSrc){
   const paid=b.payments.reduce((a,p)=>a+p.amount,0), remain=b.totalAmt-paid;
   const guests=b.guests?b.guests.split("\n").map(g=>g.trim()).filter(Boolean):[];
-  const rows=b.svcs.map(s=>{
-    const st=stayInfo(s);
-    const date=!st?"—":(st.dIn===st.dOut||!st.dOut)?esc(st.dIn):`${esc(st.dIn)} → ${esc(st.dOut)}${st.nights?` (${st.nights} đêm)`:""}`;
-    return `<tr><td class="n">${esc(s.name)}</td><td class="nw">${date}</td><td class="nw">${esc(qtyFull(s))}</td><td class="r">${VNDn(s.price)}</td><td class="r n">${VNDn(s.total)}</td></tr>`;
-  }).join("");
+  const rows=b.svcs.map(slipRows).join("");
   return `
   <div class="a5-head">
     <img class="a5-logo" src="${SLIP_ID_LOGO}" alt="">
@@ -1103,10 +1460,10 @@ async function copySlipImage(id){
 function copyDH(id, si){
   const b=bookings.find(x=>x.id===id); if(!b) return;
   const s=b.svcs[si]; if(!s) return;
-  if(!s.totalNet){ toast("Chưa nhập giá net cho dịch vụ này"); return; }
-  const st=stayInfo(s);
-  let t=`ĐH: ${b.id}\n${s.name}\nSố lượng: ${qtyText(s)}`;
-  if(st) t+=`\nCheck in: ${st.dIn}\nCheck out: ${st.dOut}${st.nights?` (${st.nights} đêm)`:""}`;
+  if(!s.totalNet){ toast(BK.netState(s)==="partial"?"Chưa nhập đủ giá net cho các nhóm của dịch vụ này":"Chưa nhập giá net cho dịch vụ này"); return; }
+  let t=`ĐH: ${b.id}\n${s.name}`;
+  t+=zaloQty(s,true);
+  t+=zaloDates(s);
   t+=`\nDanh sách:\n${guestBullets(b).join("\n")}\n\nNet: ${VNDn(s.totalNet)}đ`;
   copyToClipboard(t,"Đã copy phiếu điều hành!");
 }
@@ -1149,14 +1506,7 @@ function csvCell(v){
 function downloadCSV(){
   if(!bookings.length){ toast("Chưa có đơn nào"); return; }
   const stLbl={pending:"Chờ cọc",partial:"Đã cọc",done:"Đã thanh toán",completed:"Đã hoàn thành"};
-  const head=["Mã đơn","Ngày tạo","Khách","SĐT","Trạng thái","Dịch vụ","Ngày đi","Ngày về","Số lượng","Đơn giá bán","Thành tiền","Đơn giá net","Tổng net","Tổng đơn","Đã thu","Còn lại"];
-  const rows=[head];
-  bookings.forEach(b=>{
-    const paid=b.payments.reduce((a,p)=>a+p.amount,0);
-    (b.svcs&&b.svcs.length?b.svcs:[{}]).forEach(s=>{
-      rows.push([b.id,b.created,b.name,b.phone,stLbl[b.status]||b.status,s.name||"",s.dateIn||"",s.dateOut||"",s.qty1?qtyText(s):"",s.price||"",s.total||"",s.netPrice||"",s.totalNet||"",b.totalAmt,paid,b.totalAmt-paid]);
-    });
-  });
+  const rows=BK.csvRows(bookings,stLbl,catList);
   const text="\ufeff"+rows.map(r=>r.map(csvCell).join(",")).join("\r\n");
   const blob=new Blob([text],{type:"text/csv;charset=utf-8"});
   const a=document.createElement("a");
@@ -1166,7 +1516,19 @@ function downloadCSV(){
   setTimeout(()=>URL.revokeObjectURL(a.href),2000);
 }
 
+function renderCatStats(){
+  const el=$("stat-cats"); if(!el) return;
+  const rows=BK.statsByCat(bookings,catList).sort((a,b)=>b.revenue-a.revenue);
+  if(!rows.length){ el.style.display="none"; return; }
+  el.style.display="";
+  el.innerHTML='<div class="sec-title"><i class="ti ti-category"></i>Theo loại dịch vụ</div>'+rows.map(r=>{
+    const prof=r.netCount?`<div style="font-size:11.5px;color:${r.profit>=0?"#2E7D32":"#B85C5C"}">Lãi ${r.profit>=0?"":"- "}${VNDn(Math.abs(r.profit))} đ (${r.netCount}/${r.count} dịch vụ có net)</div>`:'<div style="font-size:11.5px;color:#7A8FA0">Chưa có giá net</div>';
+    return `<div class="stat-item"><div><div style="font-size:14px;font-weight:500">${esc(r.name)}</div><div style="font-size:11.5px;color:#7A8FA0">${r.count} dịch vụ</div></div>
+      <div style="text-align:right"><div style="font-family:Georgia,serif;font-size:16px;font-weight:700">${VNDn(r.revenue)} đ</div>${prof}</div></div>`;
+  }).join("")+'<div style="font-size:11px;color:#7A8FA0;margin-top:8px">Lãi theo loại chỉ tính các dịch vụ đã nhập đủ giá net. Đơn cũ tính vào loại Xe.</div>';
+}
 function renderStats(){
+  renderCatStats();
   const rev=bookings.reduce((a,b)=>a+b.totalAmt,0);
   const paid=bookings.reduce((a,b)=>a+b.payments.reduce((x,p)=>x+p.amount,0),0);
   const totalNet=bookings.reduce((a,b)=>a+b.svcs.reduce((x,s)=>x+(s.totalNet||0),0),0);

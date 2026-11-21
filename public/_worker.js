@@ -16,6 +16,31 @@ function escape(s){return s.replaceAll('&','&amp;').replaceAll('"','&quot;').rep
 // Whitelist formatting; remove arbitrary attributes and all executable URL schemes.
 export function sanitize(input){return String(input||'').replace(/<!--[\s\S]*?-->/g,'').replace(/<(script|style|iframe|object|svg|math)\b[^>]*>[\s\S]*?<\/\1\s*>/gi,'').replace(/<\/?([a-z0-9]+)\b([^>]*)>/gi,(all,name,attrs)=>{name=name.toLowerCase();if(name==='div')name='p';if(!tags.has(name))return '';if(all.startsWith('</'))return ['br','img'].includes(name)?'':'</'+name+'>';if(name==='a'){const href=/\bhref\s*=\s*["']([^"']*)["']/i.exec(attrs)?.[1]||'';let url;try{url=new URL(href)}catch{return '<a>'}return ['https:','http:'].includes(url.protocol)?'<a href="'+escape(url.href)+'" target="_blank" rel="noopener noreferrer">':'<a>'}if(name==='img'){const src=/\bsrc\s*=\s*["']([^"']*)["']/i.exec(attrs)?.[1]||'';const alt=/\balt\s*=\s*["']([^"']*)["']/i.exec(attrs)?.[1]||'Ảnh minh họa';return validImage(src)?'<img src="'+escape(src)+'" alt="'+escape(alt)+'">':''}const style=/\bstyle\s*=\s*["']([^"']*)["']/i.exec(attrs)?.[1]||'';const cls=/\bclass\s*=\s*["']([^"']*)["']/i.exec(attrs)?.[1]||'';const alignment=/(?:^|;)\s*text-align\s*:\s*(left|center|right|justify)\s*(?:;|$)/i.exec(style)?.[1]?.toLowerCase()||/^align-(left|center|right|justify)$/.exec(cls)?.[1];return '<'+name+(['p','h2','h3','li','blockquote'].includes(name)&&alignment?' class="align-'+alignment+'"':'')+'>'})}
 function validate(value,id){if(!value||typeof value!=='object'||Array.isArray(value))throw Error('Nội dung không hợp lệ.');const p={};if(id==='settings'){const keys=['heroTitle','heroSubtitle','heroImage','aboutTitle','aboutBody','founderName','founderImage','phone','email','company','address','hours','zalo','cardVinpearl','cardHotel','cardTour','cardTicket'];for(const k of [...keys,...Object.keys(value).filter(k=>/^home[A-Z][A-Za-z0-9]{0,60}$/.test(k))]){if(value[k]!==undefined){if(typeof value[k]!=='string'||value[k].length>12000)throw Error('Trường nội dung quá dài.');p[k]=value[k]}}for(const k of ['heroImage','founderImage','cardVinpearl','cardHotel','cardTour','cardTicket'])if(p[k]&&!validImage(p[k]))throw Error('Ảnh không hợp lệ.');if(p.phone&&!/^\+?[0-9\s-]{8,20}$/.test(p.phone))throw Error('Số điện thoại không hợp lệ.');if(p.zalo&&!/^https:\/\/zalo\.me\/[0-9]+$/.test(p.zalo))throw Error('Liên kết Zalo không hợp lệ.');return p}for(const k of ['title','summary','category','author','body','cover']){if(value[k]!==undefined&&typeof value[k]!=='string')throw Error('Nội dung không hợp lệ.');p[k]=value[k]||''}if(!p.title.trim()||p.title.length>180||p.summary.length>1000||p.body.length>150000||p.author.length>150||p.category.length>150)throw Error('Kiểm tra tiêu đề và độ dài bài viết.');if(p.cover&&!validImage(p.cover))throw Error('Ảnh không hợp lệ.');p.body=sanitize(p.body);return p}
+// Loại dịch vụ và đơn vị theo loại (thiết lập của trang Booking). Kiểm tra chặt vì dữ liệu này được chèn lại vào giao diện.
+const BOOKING_ID_RE=/^[a-z0-9]{1,20}$/,BOOKING_DATE_MODES=['single','range','trip'],BOOKING_PEOPLE=['none','al-tre','al-tre-nct'];
+function cleanBookingCategories(v){
+ if(!Array.isArray(v)||v.length<1||v.length>20)return null;
+ const out=[],ids=new Set(),names=new Set();
+ for(const c of v){
+  if(!c||typeof c!=='object'||Array.isArray(c)||typeof c.id!=='string'||!BOOKING_ID_RE.test(c.id)||typeof c.name!=='string')return null;
+  const name=c.name.trim().replace(/\s+/g,' ');
+  if(name.length<1||name.length>30||/[<>"&]/.test(name)||!BOOKING_DATE_MODES.includes(c.dateMode)||!BOOKING_PEOPLE.includes(c.people))return null;
+  if(ids.has(c.id)||names.has(name.toLowerCase()))return null;
+  ids.add(c.id);names.add(name.toLowerCase());out.push({id:c.id,name,dateMode:c.dateMode,people:c.people})
+ }
+ return out
+}
+function cleanUnitHide(v){
+ if(!v||typeof v!=='object'||Array.isArray(v))return null;
+ const keys=Object.keys(v);if(keys.length>300)return null;
+ const out={};
+ for(const k of keys){
+  if(k==='__proto__'||k.length<1||k.length>20||/[<>"&]/.test(k)||!Array.isArray(v[k])||v[k].length>20)return null;
+  if(!v[k].every(x=>typeof x==='string'&&BOOKING_ID_RE.test(x)))return null;
+  const ids=[...new Set(v[k])];if(ids.length)Object.defineProperty(out,k,{value:ids,enumerable:true,writable:true,configurable:true})
+ }
+ return out
+}
 function validateBooking(b,expected){if(!b||typeof b!=='object'||Array.isArray(b))throw Error('Dữ liệu đơn hàng không hợp lệ.');if(typeof b.id!=='string'||!/^ST[0-9]{1,12}$/.test(b.id)||(expected&&b.id!==expected))throw Error('Mã đơn không hợp lệ.');if(typeof b.name!=='string'||b.name.length>200||typeof b.phone!=='string'||b.phone.length>60)throw Error('Tên hoặc số điện thoại không hợp lệ.');if(!Array.isArray(b.svcs)||b.svcs.length>60||!b.svcs.every(x=>x&&typeof x==='object'&&!Array.isArray(x)))throw Error('Danh sách dịch vụ không hợp lệ.');if(!Array.isArray(b.payments)||b.payments.length>200||!b.payments.every(x=>x&&typeof x==='object'&&Number.isFinite(x.amount)))throw Error('Danh sách thanh toán không hợp lệ.');if(!Number.isFinite(b.totalAmt)||b.totalAmt<0)throw Error('Tổng tiền không hợp lệ.');if(JSON.stringify(b).length>150000)throw Error('Dữ liệu đơn quá lớn.');return b}
 // ---- Bài đăng Facebook/Threads (lịch đăng, sửa bài, mẫu phong cách) ----
 const POST_PLATFORMS=['FACEBOOK','THREADS'],POST_LEAD_MS=5*60000,POST_MAX_IMAGES=10;
@@ -187,12 +212,26 @@ if(path==='/api/booking-units'){
 if(path==='/api/booking-settings'){
  if(!env.BOOKINGS)return json({error:'Chưa kết nối kho đơn hàng.'},503);
  try{
-  if(req.method==='GET'){const {results}=await env.BOOKINGS.prepare('SELECT key,value FROM booking_settings').all();const out={};for(const r of results)out[r.key]=r.value;return json({settings:{slipNote:out.slipNote||''}})}
+  if(req.method==='GET'){const {results}=await env.BOOKINGS.prepare('SELECT key,value FROM booking_settings').all();const out={};for(const r of results)out[r.key]=r.value;const parse=k=>{try{return out[k]?JSON.parse(out[k]):null}catch{return null}};return json({settings:{slipNote:out.slipNote||'',categories:parse('categories'),unitHide:parse('unitHide')||{}}})}
   if(req.method==='PUT'){
    let input;try{input=await req.json()}catch{return json({error:'Nội dung không hợp lệ.'},400)}
-   const note=input?.slipNote;
-   if(typeof note!=='string'||note.length>300)return json({error:'Ghi chú tối đa 300 ký tự.'},400);
-   await env.BOOKINGS.prepare('INSERT INTO booking_settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind('slipNote',note.trim()).run();return json({ok:true})
+   if(!input||typeof input!=='object'||Array.isArray(input))return json({error:'Nội dung không hợp lệ.'},400);
+   const writes=[];
+   if(input.slipNote!==undefined){
+    const note=input.slipNote;
+    if(typeof note!=='string'||note.length>300)return json({error:'Ghi chú tối đa 300 ký tự.'},400);
+    writes.push(['slipNote',note.trim()])
+   }
+   if(input.categories!==undefined){
+    const cats=cleanBookingCategories(input.categories);if(!cats)return json({error:'Danh sách loại dịch vụ không hợp lệ.'},400);
+    writes.push(['categories',JSON.stringify(cats)])
+   }
+   if(input.unitHide!==undefined){
+    const hide=cleanUnitHide(input.unitHide);if(!hide)return json({error:'Thiết lập đơn vị theo loại không hợp lệ.'},400);
+    writes.push(['unitHide',JSON.stringify(hide)])
+   }
+   if(!writes.length)return json({error:'Không có gì để lưu.'},400);
+   for(const [k,v] of writes)await env.BOOKINGS.prepare('INSERT INTO booking_settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(k,v).run();return json({ok:true})
   }
  }catch{return json({error:'Chưa có bảng thiết lập. Cần chạy thêm lệnh tạo bảng trong D1.'},503)}
  return json({error:'Không hỗ trợ.'},405)
