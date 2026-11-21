@@ -77,6 +77,22 @@ test('Custom units: login required, saved once, validated',async()=>{
   assert.equal((await call('booking-settings','PUT',{slipNote:5})).status,400);
   assert.equal((await call('booking-settings','PUT',{slipNote:''})).status,200);
   assert.equal((await (await call('booking-settings')).json()).settings.slipNote,'');
+  // Loại dịch vụ và đơn vị theo loại
+  let st=(await (await call('booking-settings')).json()).settings;assert.equal(st.categories,null);assert.deepEqual(st.unitHide,{});
+  const cats=[{id:'hotel',name:'Phòng khách sạn',dateMode:'range',people:'none'},{id:'c1',name:'  Spa   cao cấp ',dateMode:'single',people:'al-tre'}];
+  assert.equal((await call('booking-settings','PUT',{categories:cats})).status,200);
+  st=(await (await call('booking-settings')).json()).settings;assert.equal(st.categories.length,2);assert.equal(st.categories[1].name,'Spa cao cấp');assert.equal(st.slipNote,'');
+  assert.equal((await call('booking-settings','PUT',{unitHide:{'vé':['hotel','c1'],'phòng':[]}})).status,200);
+  st=(await (await call('booking-settings')).json()).settings;assert.deepEqual(st.unitHide,{'vé':['hotel','c1']});
+  assert.equal((await call('booking-settings','PUT',{slipNote:'Giữ nguyên'})).status,200);
+  st=(await (await call('booking-settings')).json()).settings;assert.equal(st.categories.length,2);assert.equal(st.slipNote,'Giữ nguyên');
+  for(const bad of [[],'x',null,[{...cats[0],id:'A'}],[{...cats[0],id:'a/b'}],[{...cats[0],name:''}],[{...cats[0],name:'<b>'}],[{...cats[0],name:'x'.repeat(31)}],[{...cats[0],dateMode:'zzz'}],[{...cats[0],people:'all'}],[cats[0],{...cats[1],id:'hotel'}],[cats[0],{...cats[1],name:'PHÒNG KHÁCH SẠN'}],Array.from({length:21},(_,i)=>({id:'k'+i,name:'L'+i,dateMode:'single',people:'none'}))])
+   assert.equal((await call('booking-settings','PUT',{categories:bad})).status,400,JSON.stringify(bad).slice(0,60));
+  for(const bad of [[],'x',null,{'vé':'hotel'},{'vé':['A B']},{'<':['hotel']},{['x'.repeat(21)]:['hotel']},{'vé':Array.from({length:21},(_,i)=>'k'+i)}])
+   assert.equal((await call('booking-settings','PUT',{unitHide:bad})).status,400,JSON.stringify(bad).slice(0,60));
+  assert.equal((await call('booking-settings','PUT',{})).status,400);
+  assert.equal((await call('booking-settings','PUT',[1])).status,400);
+  st=(await (await call('booking-settings')).json()).settings;assert.equal(st.categories.length,2);assert.deepEqual(st.unitHide,{'vé':['hotel','c1']});
  }finally{env.close()}
 });
 
