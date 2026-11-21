@@ -8,7 +8,7 @@ vm.runInNewContext(fs.readFileSync(new URL('../public/admin/booking/calc.js',imp
 const BK=sandbox.module.exports;
 const same=(a,b)=>assert.equal(JSON.stringify(a),JSON.stringify(b));
 const cat=id=>BK.findCat(BK.DEFAULT_CATS,id);
-const base=(id,extra={})=>{const c=cat(id);return {catId:c.id,catName:c.name,dateMode:c.dateMode,people:c.people,name:'Dịch vụ thử',dateIn:'',dateOut:'',unit:'vé',...extra}};
+const base=(id,extra={})=>{const c=cat(id);return {catId:c.id,catName:c.name,dateMode:c.dateMode,people:c.people,name:'Dịch vụ thử',partnerId:'p1',partner:'Đối tác thử',dateIn:'',dateOut:'',unit:'vé',...extra}};
 const ok=r=>{assert.equal(r.ok,true,r.error);return r.svc};
 
 test('Khách sạn: số phòng × số đêm × giá một đêm, số đêm tự tính từ ngày nhận/trả',()=>{
@@ -125,4 +125,35 @@ test('Danh sách loại: lọc dữ liệu hỏng, trùng mã, tên sai; rỗng 
  assert.equal(BK.normalizeCats([{id:'zz',name:'<>',dateMode:'single',people:'none'}]).length,6);
  const ids=BK.DEFAULT_CATS.map(c=>c.id);same(ids,['hotel','tour','xe','ve','vui','an']);
  same(BK.groupKeys('al-tre-nct'),['al','tre','nct']);same(BK.groupKeys('none'),[]);
+});
+
+test('Đối tác bắt buộc với bố cục mới, ghi chú không bắt buộc',()=>{
+ const t=(extra)=>BK.buildService(base('tour',{lines:{al:{qty:1,price:1000}},...extra}));
+ assert.equal(t({partnerId:''}).ok,false);assert.equal(t({partnerId:''}).error,'Chọn đối tác.');
+ assert.equal(t({partner:'  '}).ok,false);
+ const a=ok(t({}));assert.equal(a.partnerId,'p1');assert.equal(a.partner,'Đối tác thử');assert.equal('note' in a,false);
+ const b=ok(t({note:'  Đón tại sảnh  '}));assert.equal(b.note,'Đón tại sảnh');
+ assert.equal(ok(t({note:'   '})).note,undefined);
+ assert.equal(t({note:'x'.repeat(300)}).ok,true);
+ assert.equal(t({note:'x'.repeat(301)}).ok,false);
+ // ghi chú và đối tác không ảnh hưởng tiền
+ assert.equal(ok(t({note:'abc'})).total,1000);
+});
+test('Đối tác: kiểm tra tên, SĐT, email, danh sách dịch vụ',()=>{
+ assert.equal(BK.validPartnerName('Vinpearl & Co'),true);assert.equal(BK.validPartnerName(' '),false);assert.equal(BK.validPartnerName('<b>'),false);assert.equal(BK.validPartnerName('x'.repeat(61)),false);
+ assert.equal(BK.validPhone(''),true);assert.equal(BK.validPhone('+84 90-123 4567'),true);assert.equal(BK.validPhone('abc'),false);
+ assert.equal(BK.validEmail(''),true);assert.equal(BK.validEmail('a@b.vn'),true);assert.equal(BK.validEmail('a@b'),false);assert.equal(BK.validEmail('a b@c.vn'),false);
+ same(BK.parseServices('Phòng A\n\n Phòng A \nTour "đảo" & Hòn Mun'),['Phòng A','Tour "đảo" & Hòn Mun']);
+ assert.equal(BK.parseServices('ok\n<x>'),null);
+ assert.equal(BK.parseServices(Array.from({length:101},(_,i)=>'d'+i).join('\n')),null);
+});
+test('Đối tác: chuẩn hóa danh sách và lọc theo loại dịch vụ',()=>{
+ const raw=[{id:'p1',name:' Khách sạn   A ',phone:'0901',email:'a@b.vn',cats:['hotel','bad id'],services:['Deluxe','Deluxe','Suite']},
+  {id:'p1',name:'Trùng mã'},{id:'p2',name:'Tour B',cats:['tour','vui']},{id:'p3',name:'<x>'},{id:'P4',name:'Mã sai'},null,'x'];
+ const list=BK.normalizePartners(raw);
+ same(list.map(p=>p.id),['p1','p2']);
+ assert.equal(list[0].name,'Khách sạn A');same(list[0].cats,['hotel']);same(list[0].services,['Deluxe','Suite']);
+ same(BK.partnersForCat(list,'tour').map(p=>p.id),['p2']);same(BK.partnersForCat(list,'xe'),[]);
+ assert.equal(BK.findPartner(list,'p2').name,'Tour B');assert.equal(BK.findPartner(list,'zz'),null);
+ same(BK.normalizePartners(null),[]);
 });
