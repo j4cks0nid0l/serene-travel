@@ -30,6 +30,23 @@ function cleanBookingCategories(v){
  }
  return out
 }
+function cleanBookingPartners(v){
+ if(!Array.isArray(v)||v.length>300)return null;
+ const t=(x,max)=>{if(typeof x!=='string')return null;const y=x.trim().replace(/\s+/g,' ');return y.length>max||/[<>]/.test(y)?null:y};
+ const out=[],ids=new Set(),names=new Set();
+ for(const p of v){
+  if(!p||typeof p!=='object'||Array.isArray(p)||typeof p.id!=='string'||!BOOKING_ID_RE.test(p.id)||ids.has(p.id))return null;
+  const name=t(p.name,60);if(!name)return null;
+  const phone=p.phone===undefined?'':t(p.phone,30);if(phone===null||!/^[0-9+().\s-]*$/.test(phone))return null;
+  const email=p.email===undefined?'':t(p.email,80);if(email===null||(email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)))return null;
+  if(!Array.isArray(p.cats)||p.cats.length>20||!p.cats.every(x=>typeof x==='string'&&BOOKING_ID_RE.test(x)))return null;
+  if(p.services!==undefined&&(!Array.isArray(p.services)||p.services.length>100))return null;
+  const services=[];for(const s of p.services||[]){const x=t(s,80);if(!x)return null;if(!services.includes(x))services.push(x)}
+  if(names.has(name.toLowerCase()))return null;
+  ids.add(p.id);names.add(name.toLowerCase());out.push({id:p.id,name,phone,email,cats:[...new Set(p.cats)],services})
+ }
+ return JSON.stringify(out).length>300000?null:out
+}
 function cleanUnitHide(v){
  if(!v||typeof v!=='object'||Array.isArray(v))return null;
  const keys=Object.keys(v);if(keys.length>300)return null;
@@ -212,7 +229,7 @@ if(path==='/api/booking-units'){
 if(path==='/api/booking-settings'){
  if(!env.BOOKINGS)return json({error:'Chưa kết nối kho đơn hàng.'},503);
  try{
-  if(req.method==='GET'){const {results}=await env.BOOKINGS.prepare('SELECT key,value FROM booking_settings').all();const out={};for(const r of results)out[r.key]=r.value;const parse=k=>{try{return out[k]?JSON.parse(out[k]):null}catch{return null}};return json({settings:{slipNote:out.slipNote||'',categories:parse('categories'),unitHide:parse('unitHide')||{}}})}
+  if(req.method==='GET'){const {results}=await env.BOOKINGS.prepare('SELECT key,value FROM booking_settings').all();const out={};for(const r of results)out[r.key]=r.value;const parse=k=>{try{return out[k]?JSON.parse(out[k]):null}catch{return null}};return json({settings:{slipNote:out.slipNote||'',categories:parse('categories'),unitHide:parse('unitHide')||{},partners:parse('partners')||[]}})}
   if(req.method==='PUT'){
    let input;try{input=await req.json()}catch{return json({error:'Nội dung không hợp lệ.'},400)}
    if(!input||typeof input!=='object'||Array.isArray(input))return json({error:'Nội dung không hợp lệ.'},400);
@@ -229,6 +246,10 @@ if(path==='/api/booking-settings'){
    if(input.unitHide!==undefined){
     const hide=cleanUnitHide(input.unitHide);if(!hide)return json({error:'Thiết lập đơn vị theo loại không hợp lệ.'},400);
     writes.push(['unitHide',JSON.stringify(hide)])
+   }
+   if(input.partners!==undefined){
+    const ps=cleanBookingPartners(input.partners);if(!ps)return json({error:'Danh sách đối tác không hợp lệ.'},400);
+    writes.push(['partners',JSON.stringify(ps)])
    }
    if(!writes.length)return json({error:'Không có gì để lưu.'},400);
    for(const [k,v] of writes)await env.BOOKINGS.prepare('INSERT INTO booking_settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(k,v).run();return json({ok:true})

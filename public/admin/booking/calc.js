@@ -15,6 +15,7 @@
     { id: 'an', name: 'Ăn uống', dateMode: 'single', people: 'al-tre' }
   ];
   var LEGACY_CAT_ID = 'xe';
+  var NOTE_MAX = 300;
 
   // ---- Ngày (gõ DDMMYY, hiện dd/mm/yy) ----
   function digits(raw) { return String(raw == null ? '' : raw).replace(/\D/g, ''); }
@@ -67,14 +68,65 @@
   function isGroup(s) { return !!(s && Array.isArray(s.lines) && s.lines.length); }
   function groupKeys(people) { return (PEOPLE[people] || []).slice(); }
 
+  // ---- Đối tác ----
+  // Tên, dịch vụ: không dùng < >. SĐT chỉ số và ký tự thường gặp. Email phải có dạng a@b.c
+  function cleanText(x, max) {
+    if (typeof x !== 'string') return null;
+    var t = x.trim().replace(/\s+/g, ' ');
+    if (t.length > max || /[<>]/.test(t)) return null;
+    return t;
+  }
+  function validPhone(x) { var t = cleanText(x, 30); return t !== null && /^[0-9+().\s-]*$/.test(t); }
+  function validEmail(x) { var t = cleanText(x, 80); return t !== null && (t === '' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t)); }
+  function validPartnerName(x) { var t = cleanText(x, 60); return t !== null && t.length >= 1; }
+  // Văn bản nhiều dòng (mỗi dòng một dịch vụ) -> mảng; null nếu có dòng không hợp lệ
+  function parseServices(text) {
+    var out = [], lines = String(text == null ? '' : text).split(/\r?\n/);
+    for (var i = 0; i < lines.length; i++) {
+      var t = cleanText(lines[i], 80);
+      if (t === null) return null;
+      if (t && out.indexOf(t) < 0) out.push(t);
+    }
+    return out.length <= 100 ? out : null;
+  }
+  function normalizePartners(raw) {
+    if (!Array.isArray(raw)) return [];
+    var out = [], ids = {};
+    raw.forEach(function (p) {
+      if (!p || typeof p !== 'object' || !ID_RE.test(p.id || '') || ids[p.id]) return;
+      if (!validPartnerName(p.name)) return;
+      var cats = Array.isArray(p.cats) ? p.cats.filter(function (c) { return typeof c === 'string' && ID_RE.test(c); }) : [];
+      var services = Array.isArray(p.services) ? parseServices(p.services.join('\n')) : [];
+      ids[p.id] = 1;
+      out.push({
+        id: p.id, name: cleanText(p.name, 60),
+        phone: validPhone(p.phone || '') ? cleanText(p.phone || '', 30) : '',
+        email: validEmail(p.email || '') ? cleanText(p.email || '', 80) : '',
+        cats: cats, services: services || []
+      });
+    });
+    return out;
+  }
+  function partnersForCat(partners, catId) {
+    return (partners || []).filter(function (p) { return (p.cats || []).indexOf(catId) >= 0; });
+  }
+  function findPartner(partners, id) {
+    for (var i = 0; i < (partners || []).length; i++) if (partners[i].id === id) return partners[i];
+    return null;
+  }
+
   // ---- Dựng dịch vụ từ dữ liệu form ----
-  // f: {catId,catName,dateMode,people,name,dateIn,dateOut,trip,unit,qty,price,net,lines:{al:{qty,price,net}}}
+  // f: {catId,catName,partnerId,partner,note,dateMode,people,name,dateIn,dateOut,trip,unit,qty,price,net,lines:{al:{qty,price,net}}}
   // price: số hoặc null nếu để trống (0 là "miễn phí" có chủ ý). net: số, 0/null nếu chưa có.
   function fail(msg) { return { ok: false, error: msg }; }
   function buildService(f) {
     var name = String(f.name || '').trim();
     if (!f.catId) return fail('Chọn loại dịch vụ.');
+    var partner = String(f.partner || '').trim();
+    if (!f.partnerId || !partner) return fail('Chọn đối tác.');
     if (!name) return fail('Nhập tên dịch vụ.');
+    var note = String(f.note || '').trim();
+    if (note.length > NOTE_MAX) return fail('Ghi chú tối đa ' + NOTE_MAX + ' ký tự.');
     var dateIn = String(f.dateIn || ''), dateOut = String(f.dateOut || '');
     var mode = f.dateMode, trip = mode === 'trip' ? (f.trip === 'round' ? 'round' : 'oneway') : null;
     var useOut = mode === 'range' || (mode === 'trip' && trip === 'round');
@@ -96,8 +148,9 @@
     }
     var svc = {
       cat: f.catName, catId: f.catId, dateMode: mode, people: f.people, name: name,
-      dateIn: dateIn, dateOut: dateOut
+      dateIn: dateIn, dateOut: dateOut, partnerId: String(f.partnerId), partner: partner
     };
+    if (note) svc.note = note;
     if (trip) svc.trip = trip;
 
     if (f.people === 'none') {
@@ -224,7 +277,9 @@
     normalizeCats: normalizeCats, findCat: findCat, catIdOf: catIdOf, catNameOf: catNameOf, validName: validName,
     isLegacy: isLegacy, isGroup: isGroup, groupKeys: groupKeys,
     buildService: buildService, svcLines: svcLines, unitsOf: unitsOf, applyNet: applyNet, netState: netState,
-    statsByCat: statsByCat, csvRows: csvRows
+    statsByCat: statsByCat, csvRows: csvRows,
+    NOTE_MAX: NOTE_MAX, cleanText: cleanText, validPhone: validPhone, validEmail: validEmail, validPartnerName: validPartnerName,
+    parseServices: parseServices, normalizePartners: normalizePartners, partnersForCat: partnersForCat, findPartner: findPartner
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.BK = api;
 })(typeof window !== 'undefined' ? window : this);
