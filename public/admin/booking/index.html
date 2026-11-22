@@ -1782,6 +1782,22 @@ function askSendPartner(id,si,kind){
   if(!s.totalNet){ toast(BK.netState(s)==="partial"?"Chưa nhập đủ giá net cho các nhóm của dịch vụ này":"Chưa nhập giá net cho dịch vụ này"); return; }
   askConfirm(`Xác nhận gửi ${kind==="email"?"email":"tin nhắn"} đặt dịch vụ cho đối tác?<div class="pay-modal-sub">${esc(s.name)}${s.partner?" · "+esc(s.partner):""}</div>`,()=>doSendPartner(id,si,kind));
 }
+// Máy tính: Gmail web. iPhone: app Gmail (không có app thì quay về Gmail web). Android: app thư mặc định.
+function openMail(to,cc,su,text){
+  const web=BK.gmailUrl(to,cc,su,text), ua=navigator.userAgent||"";
+  const ios=/iPhone|iPad|iPod/.test(ua)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
+  if(ios){
+    let left=false; const onHide=()=>{ if(document.hidden) left=true; };
+    document.addEventListener("visibilitychange",onHide);
+    setTimeout(()=>{ document.removeEventListener("visibilitychange",onHide); if(!left&&!document.hidden) location.href=web; },1800);
+    location.href=BK.gmailAppUrl(to,cc,su,text); return true;
+  }
+  if(/Android/i.test(ua)){ location.href=BK.mailtoUrl(to,cc,su,text); return true; }
+  const w=window.open(web,"_blank");
+  if(!w){ toast("Trình duyệt đã chặn cửa sổ Gmail. Cho phép cửa sổ bật lên cho trang này rồi thử lại.",5000); return false; }
+  try{ w.opener=null; }catch(e){}
+  return true;
+}
 function doSendPartner(id,si,kind){
   const b=bookings.find(x=>x.id===id); if(!b) return;
   const s=b.svcs[si]; if(!s) return;
@@ -1789,9 +1805,8 @@ function doSendPartner(id,si,kind){
   if(kind==="email"){
     const pt=BK.findPartner(partners,s.partnerId), to=pt?pt.email:"";
     const cc=BK.mergeEmails([pt&&pt.cc,ccInternal],[to]);
-    const w=window.open(BK.gmailUrl(to,cc,"Serene Travel xác nhận đặt dịch vụ - ĐH "+b.id,text),"_blank");
-    if(!w){ toast("Trình duyệt đã chặn cửa sổ Gmail. Cho phép cửa sổ bật lên cho trang này rồi thử lại.",5000); return; }
-    try{ w.opener=null; }catch(e){}
+    const su="Serene Travel xác nhận đặt dịch vụ - ĐH "+b.id;
+    if(!openMail(to,cc,su,text)) return;
     if(!to) toast("Đối tác này chưa có email. Điền ô To trong Gmail, hoặc thêm email ở Thiết lập > Đối tác.",6000);
     markSent(id,si,"email");
   } else {
