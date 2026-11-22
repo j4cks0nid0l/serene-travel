@@ -29,6 +29,7 @@ assert.equal((await call('content/post-example','PUT',{data,mode:'publish'})).st
 assert.equal((await call('content/post-example','PUT',{data:{...data,title:'Sửa khi đang đăng'},mode:'draft'})).status,200);it=await list();assert.ok(!it.draft.hidden&&it.published);
 assert.equal((await (await call('public')).json()).items.find(x=>x.id==='post-example').hidden,undefined,'bản công khai không có dấu ẩn');
 assert.equal((await call('content/post-example','PUT',{data,mode:'unpublish'})).status,200)}
+{assert.equal((await call('content/post-example','DELETE')).status,200);assert.equal((await (await call('content')).json()).items.some(x=>x.id==='post-example'),false);assert.equal((await call('content/post-example','DELETE')).status,404);assert.equal((await call('content/service-tour-dao','DELETE')).status,400);assert.equal((await call('content/settings','DELETE')).status,400)}
 assert.equal((await call('content/settings','PUT',{data:{phone:'0327 818 196',company:'Serene test',homeCard1Title:'Combo Vinpearl'},mode:'publish'})).status,200);
 assert.equal((await (await call('public')).json()).items.find(x=>x.id==='settings').homeCard1Title,'Combo Vinpearl');
 assert.equal((await call('content/settings','PUT',{data:{heroImage:'javascript:bad'},mode:'publish'})).status,400);
