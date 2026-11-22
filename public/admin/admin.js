@@ -59,11 +59,10 @@ if(!root.children.length){const p=document.createElement('p');p.className='nav-e
 const STATES={live:['Đã đăng','live'],draft:['Lưu nháp','draft'],hidden:['Đang ẩn','hidden']};
 const stateOf=item=>item?.published?'live':item?.draft?.hidden?'hidden':'draft';
 function setBadge(item){const b=$('state-badge'),st=STATES[stateOf(item)];b.textContent=item?.published?'Đã đăng - đang hiển thị trên website':st[0];b.className='badge '+st[1]}
-const groupOf=x=>{if(x.id.startsWith('service-'))return (serviceGroups.find(g=>g.ids.includes(x.id))||{title:'Dịch vụ khác'}).title;return x.category||'Chưa chọn mục'};
-let mState='all',mType='all',mQuery='';
+const groupOf=x=>x.category||'Chưa chọn mục';
+let mState='all',mQuery='';
 function pageData(id){const item=items.find(x=>x.id===id),p={...(defaults.find(x=>x.id===id)||{}),...(item?.draft||{})};return Object.fromEntries(['title','summary','category','author','body','cover'].map(k=>[k,p[k]||'']))}
-function renderManage(){const all=available().filter(x=>x.id!=='settings').map(x=>({...x,state:stateOf(items.find(i=>i.id===x.id)),updated:items.find(i=>i.id===x.id)?.updated||'',type:x.id.startsWith('service-')?'service':'post'}));
-const byType=all.filter(x=>mType==='all'||x.type===mType),q=norm(mQuery.trim());
+function renderManage(){const byType=available().filter(x=>x.id.startsWith('post-')).map(x=>({...x,state:stateOf(items.find(i=>i.id===x.id)),updated:items.find(i=>i.id===x.id)?.updated||''})),q=norm(mQuery.trim());
 const count=k=>byType.filter(x=>k==='all'||x.state===k).length;
 const filters=$('manage-filters');filters.replaceChildren();
 for(const [k,t] of [['all','Tất cả'],['draft','Lưu nháp'],['live','Đã đăng'],['hidden','Đang ẩn']]){const b=document.createElement('button');b.type='button';b.className='chip'+(mState===k?' on':'');b.textContent=t+' ('+count(k)+')';b.setAttribute('aria-pressed',mState===k);b.onclick=()=>{mState=k;renderManage()};filters.append(b)}
@@ -72,8 +71,7 @@ const body=$('manage-rows');body.replaceChildren();
 for(const x of rows){const tr=document.createElement('tr');
 const td=(label,node)=>{const c=document.createElement('td');c.dataset.label=label;c.append(node);tr.append(c)};
 const name=document.createElement('button');name.type='button';name.className='row-link';name.textContent=x.title||'Bài chưa đặt tên';name.onclick=()=>open(x.id);td('Tên',name);
-td('Loại',document.createTextNode(x.type==='service'?'Dịch vụ':'Cẩm nang'));
-td('Mục',document.createTextNode(groupOf(x)));
+td('Chuyên mục',document.createTextNode(groupOf(x)));
 const st=document.createElement('span');st.className='badge '+STATES[x.state][1];st.textContent=STATES[x.state][0];td('Trạng thái',st);
 td('Cập nhật',document.createTextNode(x.updated?new Date(x.updated).toLocaleDateString('vi-VN'):'Chưa lưu'));
 const act=document.createElement('button');act.type='button';act.className='row-act';act.textContent=x.state==='live'?'Ẩn':'Đăng';act.onclick=()=>toggleState(x.id,x.state==='live'?'unpublish':'publish',act);td('Thao tác',act);
@@ -130,5 +128,4 @@ $('nav-search').oninput=nav;
 $('title').addEventListener('input',()=>{$('page-title').textContent=$('title').value||'Bài viết mới'});
 document.querySelectorAll('.more-menu button').forEach(b=>b.addEventListener('click',()=>{$('more').open=false}));
 document.addEventListener('click',e=>{if(!e.target.closest('#more'))$('more').open=false});
-$('manage-type').onchange=e=>{mType=e.target.value;renderManage()};
 $('manage-search').oninput=e=>{mQuery=e.target.value;renderManage()};
