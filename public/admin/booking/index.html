@@ -259,6 +259,18 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
  .menu-btn{display:none}
 }
 .a5-sn{font-weight:400;font-size:.86em;color:#5A6F7D;margin-top:.15em;white-space:pre-line}
+.send-card{padding:12px}
+.send-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.send-tab{position:relative;padding:12px 6px;border:.5px solid rgba(58,125,153,.25);border-radius:10px;background:#fff;font:600 13px inherit;font-family:inherit;color:#2A5F78;cursor:pointer}
+.send-tab.on{background:#2A5F78;color:#fff;border-color:#2A5F78}
+.sent-dot{position:absolute;top:7px;right:8px;width:8px;height:8px;border-radius:50%;background:#4A9B6F}
+.send-panel{margin-top:12px;border-top:.5px dashed rgba(58,125,153,.3);padding-top:6px}
+.send-row{padding:10px 0;border-bottom:.5px solid rgba(58,125,153,.12)}
+.send-row:last-of-type{border-bottom:0}
+.send-name{font-size:12.5px;font-weight:600;color:#2A5F78;margin-bottom:4px}.send-name span{font-weight:400;color:#7A8FA0}
+.send-status{display:inline-block;font-size:11.5px;padding:2px 9px;border-radius:20px;background:#EEF2F5;color:#6B7F8E;margin-bottom:8px}.send-status.ok{background:#E3F3EA;color:#2F7A52}
+.send-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.send-hint{font-size:11px;color:#7A8FA0;margin-top:4px}
 .pay-modal{position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(20,40,55,.45);z-index:9000;display:none;align-items:center;justify-content:center;padding:16px}
 .pay-modal.show{display:flex}
 .pay-modal-box{background:#fff;border-radius:14px;padding:20px 18px 16px;width:100%;max-width:380px;box-shadow:0 12px 40px rgba(20,40,55,.3);font-size:14px;line-height:1.55;color:#2C3E50}
@@ -377,6 +389,11 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
   </div>
   <div class="card set-page" data-page="partners">
     <div class="sec-title"><i class="ti ti-users"></i>Đối tác</div>
+    <div class="cat-item" style="margin-bottom:12px">
+      <label>CC nội bộ Serene (CC vào mọi email gửi đối tác)</label>
+      <input id="set-cc-internal" maxlength="400" placeholder="Ví dụ: ketoan@serene.vn, dieuhanh@serene.vn. Để trống nếu không cần" style="margin-bottom:8px">
+      <button class="btn-outline" style="width:100%" onclick="saveCcInternal()">Lưu email CC nội bộ</button>
+    </div>
     <div id="partner-list"></div>
     <div style="margin-top:10px;padding-top:10px;border-top:.5px dashed rgba(58,125,153,.25)">
       <label>Thêm đối tác mới</label>
@@ -385,6 +402,8 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
         <div><label>Số điện thoại</label><input id="pt-new-phone" maxlength="30" inputmode="tel" placeholder="0901 234 567"></div>
         <div><label>Email</label><input id="pt-new-email" maxlength="80" inputmode="email" placeholder="ten@congty.vn"></div>
       </div>
+      <label>Email CC (có thể nhiều email, cách nhau dấu phẩy)</label>
+      <input id="pt-new-cc" maxlength="400" placeholder="quanly@congty.vn, ketoan@congty.vn" style="margin-bottom:8px">
       <label>Loại dịch vụ đối tác cung cấp</label>
       <div class="unit-cats" id="pt-new-cats" style="margin-bottom:8px"></div>
       <label>Dịch vụ của đối tác (mỗi dòng một dịch vụ, có thể để trống)</label>
@@ -412,7 +431,7 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
 <div class="pay-modal" id="pay-modal" role="dialog" aria-modal="true" aria-labelledby="pay-modal-text" onclick="if(event.target===this)closePay()">
   <div class="pay-modal-box">
     <div id="pay-modal-text"></div>
-    <div class="pay-modal-btns"><button class="btn-outline" onclick="closePay()">Hủy</button><button class="btn-main" style="padding:10px" onclick="okPay()">Xác nhận</button></div>
+    <div class="pay-modal-btns" id="pay-modal-btns"></div>
   </div>
 </div>
 <div class="toast" id="toast"></div>
@@ -757,6 +776,7 @@ async function removeUnit(name){
 // ── Thiết lập: loại dịch vụ, đơn vị theo loại, ghi chú cuối phiếu ──
 let slipNote="";
 let partners=[];
+let ccInternal=[];
 async function loadSettings(){
   try{
     const d=await apiBooking("GET", undefined, "/api/booking-settings");
@@ -765,6 +785,8 @@ async function loadSettings(){
     catList=BK.normalizeCats(st.categories);
     unitHide=st.unitHide&&typeof st.unitHide==="object"?st.unitHide:{};
     partners=BK.normalizePartners(st.partners);
+    ccInternal=BK.parseEmails((st.ccInternal||[]).join(","))||[];
+    const ci=$("set-cc-internal"); if(ci) ci.value=ccInternal.join(", ");
     refreshAllChips(); refreshUnitSelects(); refreshAllPartners();
   }
   catch(e){ console.warn("Chưa tải được thiết lập:", e.message); }
@@ -900,7 +922,7 @@ function partnerChanged(i,sel){
   const q=$("spq-"+i); if(q) q.innerHTML="";
   refreshSvcList(i);
 }
-function checkPartnerFields(name,phone,email,exceptId){
+function checkPartnerFields(name,phone,email,exceptId,cc){
   name=(name||"").trim().replace(/\s+/g," ");
   if(!BK.validPartnerName(name)) return {error:"Tên đối tác từ 1 đến 60 ký tự, không dùng < >"};
   const low=name.toLowerCase();
@@ -909,7 +931,9 @@ function checkPartnerFields(name,phone,email,exceptId){
   if(!BK.validPhone(phone)) return {error:"Số điện thoại chỉ gồm số và dấu + ( ) - . (tối đa 30 ký tự)"};
   email=(email||"").trim();
   if(!BK.validEmail(email)) return {error:"Email chưa đúng dạng (ví dụ ten@congty.vn)"};
-  return {name,phone,email};
+  const ccl=BK.parseEmails(cc||"");
+  if(ccl===null) return {error:"Email CC chưa đúng. Ngăn cách bằng dấu phẩy, tối đa 10 email"};
+  return {name,phone,email,cc:ccl};
 }
 function newPartnerId(){ return "p"+Date.now().toString(36)+Math.floor(Math.random()*36).toString(36); }
 // Thêm nhanh ngay trong màn nhập booking
@@ -930,7 +954,7 @@ async function quickPartnerSave(i){
   const w=svcEl(i); if(!w) return;
   const r=checkPartnerFields($("pq-name-"+i).value,$("pq-phone-"+i).value,$("pq-email-"+i).value,"");
   if(r.error){ toast(r.error,4000); return; }
-  const np={id:newPartnerId(),name:r.name,phone:r.phone,email:r.email,cats:[w.dataset.cat],services:[]};
+  const np={id:newPartnerId(),name:r.name,phone:r.phone,email:r.email,cc:[],cats:[w.dataset.cat],services:[]};
   partners.push(np);
   if(!(await saveSetting({partners},"Đã thêm đối tác: "+np.name))){ partners.pop(); return; }
   refreshAllPartners(); renderPartnerList();
@@ -954,6 +978,8 @@ function renderPartnerList(){
       <div><label>Số điện thoại</label><input maxlength="30" inputmode="tel" value="${escAttr(p.phone)}" onchange="partnerUpdate('${p.id}','phone',this.value)"></div>
       <div><label>Email</label><input maxlength="80" inputmode="email" value="${escAttr(p.email)}" onchange="partnerUpdate('${p.id}','email',this.value)"></div>
     </div>
+    <label>Email CC (cách nhau dấu phẩy)</label>
+    <input maxlength="400" value="${escAttr((p.cc||[]).join(", "))}" placeholder="Có thể để trống" onchange="partnerUpdate('${p.id}','cc',this.value)" style="margin-bottom:8px">
     <label>Loại dịch vụ cung cấp</label>
     <div class="unit-cats" style="margin-bottom:8px">${catChecks(`data-pid="${p.id}" onchange="partnerToggleCat(this)" `,p.cats)}</div>
     <label>Dịch vụ (mỗi dòng một dịch vụ)</label>
@@ -965,6 +991,11 @@ function renderNewPartnerCats(){
   const on=[...el.querySelectorAll("input:checked")].map(x=>x.dataset.c);
   el.innerHTML=catChecks("",on);
 }
+async function saveCcInternal(){
+  const l=BK.parseEmails($("set-cc-internal").value);
+  if(l===null){ toast("Email CC chưa đúng. Ngăn cách bằng dấu phẩy, tối đa 10 email",4000); return; }
+  if(await saveSetting({ccInternal:l},"Đã lưu email CC nội bộ")){ ccInternal=l; $("set-cc-internal").value=l.join(", "); }
+}
 async function partnerUpdate(pid,field,val){
   const p=partners.find(x=>x.id===pid); if(!p) return;
   const before=JSON.stringify(p);
@@ -973,9 +1004,9 @@ async function partnerUpdate(pid,field,val){
     if(l===null){ toast("Mỗi dịch vụ tối đa 80 ký tự, không dùng < >, tối đa 100 dịch vụ",4000); renderPartnerList(); return; }
     p.services=l;
   } else {
-    const r=checkPartnerFields(field==="name"?val:p.name, field==="phone"?val:p.phone, field==="email"?val:p.email, pid);
+    const r=checkPartnerFields(field==="name"?val:p.name, field==="phone"?val:p.phone, field==="email"?val:p.email, pid, field==="cc"?val:(p.cc||[]).join(","));
     if(r.error){ toast(r.error,4000); renderPartnerList(); return; }
-    p.name=r.name; p.phone=r.phone; p.email=r.email;
+    p.name=r.name; p.phone=r.phone; p.email=r.email; p.cc=r.cc;
   }
   if(JSON.stringify(p)===before) return;
   if(await saveSetting({partners},"Đã lưu đối tác")) refreshAllPartners();
@@ -998,16 +1029,16 @@ async function partnerRemove(pid){
   renderPartnerList();
 }
 async function partnerAdd(){
-  const r=checkPartnerFields($("pt-new-name").value,$("pt-new-phone").value,$("pt-new-email").value,"");
+  const r=checkPartnerFields($("pt-new-name").value,$("pt-new-phone").value,$("pt-new-email").value,"",$("pt-new-cc").value);
   if(r.error){ toast(r.error,4000); return; }
   const cats=[...$("pt-new-cats").querySelectorAll("input:checked")].map(x=>x.dataset.c);
   if(!cats.length){ toast("Chọn ít nhất 1 loại dịch vụ đối tác cung cấp",4000); return; }
   const services=BK.parseServices($("pt-new-services").value);
   if(services===null){ toast("Mỗi dịch vụ tối đa 80 ký tự, không dùng < >, tối đa 100 dịch vụ",4000); return; }
   if(partners.length>=300){ toast("Tối đa 300 đối tác",4000); return; }
-  partners.push({id:newPartnerId(),name:r.name,phone:r.phone,email:r.email,cats,services});
+  partners.push({id:newPartnerId(),name:r.name,phone:r.phone,email:r.email,cc:r.cc,cats,services});
   if(await saveSetting({partners},"Đã thêm đối tác: "+r.name)){
-    ["pt-new-name","pt-new-phone","pt-new-email","pt-new-services"].forEach(id=>{ $(id).value=""; });
+    ["pt-new-name","pt-new-phone","pt-new-email","pt-new-cc","pt-new-services"].forEach(id=>{ $(id).value=""; });
     $("pt-new-cats").querySelectorAll("input").forEach(x=>{ x.checked=false; });
     refreshAllPartners(); renderPartnerList(); renderNewPartnerCats();
   } else partners.pop();
@@ -1290,7 +1321,7 @@ async function createBooking(){
   if(editingId){
     const b=bookings.find(x=>x.id===editingId);
     if(!b){ toast("Không tìm thấy đơn để sửa"); setEditMode(null); return; }
-    b.name=name; b.phone=phone; b.guests=guests; b.svcs=svcs; b.totalAmt=totalAmt;
+    b.name=name; b.phone=phone; b.guests=guests; b.svcs=svcs; b.totalAmt=totalAmt; delete b.sent;
     if(b.status!=="completed"){
       const paid=b.payments.reduce((a,p)=>a+p.amount,0);
       b.status=paid>=totalAmt?"done":paid>0?"partial":"pending";
@@ -1331,7 +1362,9 @@ function toggleDetail(id){
   selId=id; renderList(); showDetail(id);
 }
 
+let sendTab="", sendFor="";
 function showDetail(id){
+  if(sendFor!==id){ sendFor=id; sendTab=""; }
   const b=bookings.find(x=>x.id===id); if(!b) return;
   const paid=b.payments.reduce((a,p)=>a+p.amount,0), remain=b.totalAmt-paid;
   const qr=getQr(remain>0?remain:b.totalAmt, b.id);
@@ -1406,28 +1439,7 @@ function showDetail(id){
     <div id="profit-summary-${id}" style="margin-top:10px"></div>
   </div>
 
-  <div class="card">
-    <div class="sec-title"><i class="ti ti-send"></i>Gửi đối tác</div>
-    ${b.svcs.map((s,si)=>`<div style="margin-bottom:10px"><div style="font-size:12px;font-weight:600;color:#2A5F78;margin-bottom:5px">${esc(s.name)}${s.partner?` <span style="font-weight:400;color:#7A8FA0">· ${esc(s.partner)}</span>`:""}</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button class="btn-outline" onclick="copyPartner('${id}',${si},'email')">Copy Email</button><button class="btn-outline" onclick="copyPartner('${id}',${si},'zalo')">Copy Zalo</button></div></div>`).join("")}
-    <div style="font-size:11px;color:#7A8FA0;margin-top:2px">Mỗi dịch vụ là một tin riêng, gửi đúng đối tác của dịch vụ đó. Cần nhập giá net ở mục trên trước.</div>
-  </div>
-
-  <div class="card">
-    <div class="sec-title"><i class="ti ti-photo"></i>Phiếu xác nhận dạng ảnh (A5 ngang)</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      <button class="btn-outline" onclick="saveSlipImage('${id}')"><i class="ti ti-download"></i>Lưu ảnh</button>
-      <button class="btn-outline" onclick="copySlipImage('${id}')"><i class="ti ti-copy"></i>Copy ảnh</button>
-    </div>
-    <div style="font-size:11px;color:#7A8FA0;margin-top:6px">Copy ảnh để dán thẳng vào Zalo trên máy tính. Trên điện thoại, dùng Lưu ảnh.</div>
-  </div>
-
-  <div class="act-row">
-    <button class="btn-outline" onclick="editBooking('${id}')"><i class="ti ti-edit"></i>Sửa đơn</button>
-    <button class="btn-outline" onclick="copyText('${id}')"><i class="ti ti-copy"></i>Copy Zalo</button>
-    <button class="btn-calendar" onclick="addToCalendar('${id}')"><i class="ti ti-calendar-plus"></i>Calendar</button>
-    <button class="btn-outline btn-danger" onclick="delBooking('${id}')"><i class="ti ti-trash"></i>Xóa</button>
-  </div>`;
+  ${sendPanelHtml(b)}`;
   setTimeout(()=>$("detail-wrap").scrollIntoView({behavior:"smooth",block:"nearest"}),80);
 }
 
@@ -1440,20 +1452,27 @@ function payInfo(b,type,id){
   if(type==="custom") return {amt:parseNum($("custom-coc-"+id)?$("custom-coc-"+id).value:""), label:"Tiền cọc", ask:"nhận cọc"};
   return {amt:0,label:"",ask:""};
 }
+// Hộp hỏi lại dùng chung: nội dung + danh sách nút [{label, main, fn}]
+let modalActs=[];
+function openModal(html,acts){
+  modalActs=acts;
+  $("pay-modal-text").innerHTML=html;
+  $("pay-modal-btns").innerHTML=acts.map((a,i)=>`<button class="${a.main?"btn-main":"btn-outline"}"${a.main?' style="padding:10px"':""} onclick="modalAct(${i})">${esc(a.label)}</button>`).join("");
+  $("pay-modal-btns").style.gridTemplateColumns=acts.length>2?"1fr":"1fr 1fr";
+  $("pay-modal").classList.add("show");
+}
+function closePay(){ modalActs=[]; $("pay-modal").classList.remove("show"); }
+function modalAct(i){ const a=modalActs[i]; closePay(); if(a&&a.fn) a.fn(); }
+function askConfirm(html,fn){ openModal(html,[{label:"Hủy"},{label:"Xác nhận",main:true,fn}]); }
 // Hỏi lại trước khi ghi nhận tiền
-let pendingPay=null;
 function askPay(id,type){
   const b=bookings.find(x=>x.id===id); if(!b) return;
   const info=payInfo(b,type,id);
   if(!info.amt){ toast(type==="custom"?"Nhập số tiền!":"Số tiền không hợp lệ!"); return; }
   const paid=b.payments.reduce((a,p)=>a+p.amount,0);
   if(paid+info.amt>b.totalAmt){ toast("Số tiền vượt quá tổng đơn ("+VND(b.totalAmt)+"). Kiểm tra lại.",4500); return; }
-  pendingPay={id,type};
-  $("pay-modal-text").innerHTML=`Xác nhận đã <b>${info.ask}</b> <b>${VND(info.amt)}</b> cho đơn <b>${esc(id)}</b>?<div class="pay-modal-sub">Sau khi xác nhận: đã nhận ${VND(paid+info.amt)} / tổng ${VND(b.totalAmt)}${paid+info.amt>=b.totalAmt?" (đã đủ)":", còn "+VND(b.totalAmt-paid-info.amt)}.</div>`;
-  $("pay-modal").classList.add("show");
+  askConfirm(`Xác nhận đã <b>${info.ask}</b> <b>${VND(info.amt)}</b> cho đơn <b>${esc(id)}</b>?<div class="pay-modal-sub">Sau khi xác nhận: đã nhận ${VND(paid+info.amt)} / tổng ${VND(b.totalAmt)}${paid+info.amt>=b.totalAmt?" (đã đủ)":", còn "+VND(b.totalAmt-paid-info.amt)}.</div>`,()=>confirmPayment(id,type));
 }
-function closePay(){ pendingPay=null; $("pay-modal").classList.remove("show"); }
-function okPay(){ const p=pendingPay; closePay(); if(p) confirmPayment(p.id,p.type); }
 function confirmPayment(id, type) {
   const b=bookings.find(x=>x.id===id); if(!b) return;
   const today=new Date().toLocaleDateString("vi-VN");
@@ -1627,8 +1646,7 @@ function copyToClipboard(txt, okMsg){
   navigator.clipboard.writeText(txt).then(()=>toast(okMsg)).catch(()=>toast("Copy thất bại"));
 }
 
-function copyText(id){
-  const b=bookings.find(x=>x.id===id); if(!b) return;
+function custMsgText(b){
   const paid=b.payments.reduce((a,p)=>a+p.amount,0);
   const gl=b.guests&&b.guests.trim()?"\nDanh sách khách:\n"+guestBullets(b).join("\n"):"";
   const blocks=b.svcs.map(s=>{
@@ -1641,7 +1659,7 @@ function copyText(id){
   const payLine = paid>0?`\n💰 Cần đặt cọc: ${VND(paid)}`:"";
   const remainLine = getRemainText(b);
   const txt=`🌊 SERENE TRAVEL - XÁC NHẬN ĐẶT DỊCH VỤ\n\nMã booking: ${b.id}\nNgày: ${b.created}\n\nĐại diện: ${b.name}\nSĐT: ${b.phone}${gl}\n\n${blocks}\n\nTỔNG CỘNG: ${VND(b.totalAmt)}${payLine}${remainLine}\n\nTHÔNG TIN CHUYỂN KHOẢN:\n  MB Bank · ${STK}\n  Người nhận: NGUYEN DUY HA\n  Nội dung: Quý khách vui lòng để nội dung mặc định\n\n🏣 SERENE TRAVEL\n📍 Đường Lư Giang, Phước Trung, Nam Nha Trang, Khánh Hòa\n📞 0327 818 196`;
-  copyToClipboard(txt,"Đã copy! Paste vào Zalo.");
+  return txt;
 }
 
 
@@ -1728,15 +1746,17 @@ async function saveSlipImage(id){
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(()=>URL.revokeObjectURL(url),4000);
     toast("Đã lưu ảnh "+id+".png");
-  }catch(e){ console.error(e); toast("Chưa tạo được ảnh: "+e.message); }
+    return true;
+  }catch(e){ console.error(e); toast("Chưa tạo được ảnh: "+e.message); return false; }
 }
 async function copySlipImage(id){
-  if(!navigator.clipboard||!window.ClipboardItem){ toast("Trình duyệt này chưa hỗ trợ copy ảnh. Hãy dùng nút Lưu ảnh."); return; }
+  if(!navigator.clipboard||!window.ClipboardItem){ toast("Trình duyệt này chưa hỗ trợ copy ảnh. Hãy chọn Tải ảnh."); return false; }
   toast("Đang tạo ảnh...");
   try{
     await navigator.clipboard.write([new ClipboardItem({"image/png":makeSlip(id)})]);
-    toast("Đã copy ảnh! Dán vào Zalo.");
-  }catch(e){ console.error(e); toast("Chưa copy được ảnh: "+e.message+". Thử nút Lưu ảnh."); }
+    toast("Đã sao chép ảnh. Dán vào tin nhắn để gửi.");
+    return true;
+  }catch(e){ console.error(e); toast("Chưa sao chép được ảnh: "+e.message+". Thử Tải ảnh."); return false; }
 }
 
 // Tin gửi đối tác: mỗi dịch vụ một tin, có bản Email và bản Zalo. Không có ghi chú của dịch vụ.
@@ -1744,17 +1764,81 @@ function partnerBody(b,s){
   return `ĐH: ${b.id}\nTên dịch vụ: ${s.name}`+zaloQty(s,true)+zaloDates(s)
     +`\nDanh sách khách hàng:\n${guestBullets(b).join("\n")}\nNet: ${VNDn(s.totalNet)}đ`;
 }
-function copyPartner(id, si, kind){
+function partnerMsg(b,s,kind){
+  if(kind==="email") return (s.partner?`Kính gửi quý đối tác: ${s.partner}`:"Kính gửi quý đối tác,")+"\n\nSerene Travel xin được xác nhận đặt dịch vụ như sau\n"+partnerBody(b,s)+"\n\nSerene Travel xin chân thành cảm ơn\nTrân trọng";
+  return "SERENE TRAVEL XÁC NHẬN ĐẶT DỊCH VỤ:\n"+partnerBody(b,s);
+}
+const stamp=()=>new Date().toLocaleString("vi-VN",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
+async function markSent(id,si,key){
+  const b=bookings.find(x=>x.id===id); if(!b) return;
+  if(si===null){ b.sent=Object.assign({},b.sent,{[key]:stamp()}); }
+  else { const s=b.svcs[si]; if(!s) return; s.sent=Object.assign({},s.sent,{[key]:stamp()}); }
+  await saveBooking(b); showDetail(id);
+}
+// Gửi đối tác: hỏi lại, rồi mở Gmail soạn sẵn hoặc sao chép tin Zalo
+function askSendPartner(id,si,kind){
   const b=bookings.find(x=>x.id===id); if(!b) return;
   const s=b.svcs[si]; if(!s) return;
   if(!s.totalNet){ toast(BK.netState(s)==="partial"?"Chưa nhập đủ giá net cho các nhóm của dịch vụ này":"Chưa nhập giá net cho dịch vụ này"); return; }
-  let t;
+  askConfirm(`Xác nhận gửi ${kind==="email"?"email":"tin nhắn"} đặt dịch vụ cho đối tác?<div class="pay-modal-sub">${esc(s.name)}${s.partner?" · "+esc(s.partner):""}</div>`,()=>doSendPartner(id,si,kind));
+}
+function doSendPartner(id,si,kind){
+  const b=bookings.find(x=>x.id===id); if(!b) return;
+  const s=b.svcs[si]; if(!s) return;
+  const text=partnerMsg(b,s,kind);
   if(kind==="email"){
-    t=(s.partner?`Kính gửi quý đối tác: ${s.partner}`:"Kính gửi quý đối tác,")+"\n\nSerene Travel xin được xác nhận đặt dịch vụ như sau\n"+partnerBody(b,s)+"\n\nSerene Travel xin chân thành cảm ơn\nTrân trọng";
+    const pt=BK.findPartner(partners,s.partnerId), to=pt?pt.email:"";
+    const cc=BK.mergeEmails([pt&&pt.cc,ccInternal],[to]);
+    const w=window.open(BK.gmailUrl(to,cc,"Serene Travel xác nhận đặt dịch vụ - ĐH "+b.id,text),"_blank");
+    if(!w){ toast("Trình duyệt đã chặn cửa sổ Gmail. Cho phép cửa sổ bật lên cho trang này rồi thử lại.",5000); return; }
+    try{ w.opener=null; }catch(e){}
+    if(!to) toast("Đối tác này chưa có email. Điền ô To trong Gmail, hoặc thêm email ở Thiết lập > Đối tác.",6000);
+    markSent(id,si,"email");
   } else {
-    t="SERENE TRAVEL XÁC NHẬN ĐẶT DỊCH VỤ:\n"+partnerBody(b,s);
+    navigator.clipboard.writeText(text).then(()=>{ toast("Đã sao chép tin nhắn Zalo"); markSent(id,si,"zalo"); }).catch(()=>toast("Sao chép thất bại"));
   }
-  copyToClipboard(t,kind==="email"?"Đã copy nội dung Email!":"Đã copy tin Zalo!");
+}
+// Gửi khách hàng
+function askSendCust(id,kind){
+  const b=bookings.find(x=>x.id===id); if(!b) return;
+  if(kind==="slip") askConfirm("Đồng ý gửi phiếu xác nhận dịch vụ cho khách hàng?",()=>openModal("Gửi phiếu xác nhận <b>"+esc(id)+"</b> bằng cách nào?",[
+    {label:"Tải ảnh",main:true,fn:async()=>{ if(await saveSlipImage(id)) markSent(id,null,"slip"); }},
+    {label:"Sao chép ảnh",main:true,fn:async()=>{ if(await copySlipImage(id)) markSent(id,null,"slip"); }},
+    {label:"Hủy"}]));
+  else askConfirm("Đồng ý gửi tin nhắn xác nhận dịch vụ cho khách hàng?",async()=>{
+    try{ await navigator.clipboard.writeText(custMsgText(b)); toast("Đã sao chép nội dung phiếu xác nhận dịch vụ "+id,4000); markSent(id,null,"msg"); }
+    catch(e){ toast("Sao chép thất bại"); }
+  });
+}
+function sentLabel(o,names){
+  const on=Object.keys(names).filter(k=>o&&o[k]);
+  return on.length?on.map(k=>names[k]).join(" + "):"Chưa gửi";
+}
+function sentTitle(o){ return Object.keys(o||{}).map(k=>k+": "+o[k]).join(", "); }
+function toggleSendTab(k){ sendTab=sendTab===k?"":k; const b=bookings.find(x=>x.id===sendFor); if(b) showDetail(b.id); }
+function sendPanelHtml(b){
+  const id=b.id;
+  const anyP=b.svcs.some(s=>s.sent&&(s.sent.email||s.sent.zalo)), anyC=!!(b.sent&&(b.sent.slip||b.sent.msg));
+  const tab=(k,label,dot)=>`<button type="button" class="send-tab${sendTab===k?" on":""}" onclick="toggleSendTab('${k}')" aria-expanded="${sendTab===k}">${label}${dot?'<span class="sent-dot" title="Đã gửi"></span>':""}</button>`;
+  let panel="";
+  if(sendTab==="partner"){
+    panel=b.svcs.map((s,si)=>{
+      const st=sentLabel(s.sent,{email:"Email",zalo:"Zalo"}), done=st!=="Chưa gửi";
+      return `<div class="send-row"><div class="send-name">${esc(s.name)}${s.partner?` <span>· ${esc(s.partner)}</span>`:""}</div>
+      <div class="send-status${done?" ok":""}" title="${escAttr(sentTitle(s.sent))}">${done?"Đã gửi "+st:st}</div>
+      <div class="send-btns"><button class="btn-outline" onclick="askSendPartner('${id}',${si},'email')">Gửi Email</button><button class="btn-outline" onclick="askSendPartner('${id}',${si},'zalo')">Gửi tin nhắn Zalo</button></div></div>`;
+    }).join("")+'<div class="send-hint">Mỗi dịch vụ gửi riêng cho đúng đối tác. Cần nhập giá net ở mục trên trước.</div>';
+  } else if(sendTab==="customer"){
+    const st=sentLabel(b.sent,{slip:"phiếu xác nhận",msg:"tin nhắn xác nhận"}), done=st!=="Chưa gửi";
+    panel=`<div class="send-row"><div class="send-status${done?" ok":""}" title="${escAttr(sentTitle(b.sent))}">${done?"Đã gửi "+st:st}</div>
+      <div class="send-btns"><button class="btn-outline" onclick="askSendCust('${id}','slip')">Phiếu xác nhận</button><button class="btn-outline" onclick="askSendCust('${id}','msg')">Tin nhắn xác nhận</button></div></div>`;
+  } else if(sendTab==="options"){
+    panel=`<div class="send-row"><div class="act-row" style="margin-top:0">
+      <button class="btn-outline" onclick="editBooking('${id}')"><i class="ti ti-edit"></i>Sửa đơn</button>
+      <button class="btn-calendar" onclick="addToCalendar('${id}')"><i class="ti ti-calendar-plus"></i>Calendar</button>
+      <button class="btn-outline btn-danger" style="grid-column:1/-1" onclick="delBooking('${id}')"><i class="ti ti-trash"></i>Xóa đơn</button></div></div>`;
+  }
+  return `<div class="card send-card"><div class="send-tabs">${tab("partner","Gửi đối tác",anyP)}${tab("customer","Gửi khách hàng",anyC)}${tab("options","Tùy chọn",false)}</div>${panel?`<div class="send-panel">${panel}</div>`:""}</div>`;
 }
 
 // Qua ngày check out cuối cùng thì đơn tự chuyển "Đã hoàn thành"

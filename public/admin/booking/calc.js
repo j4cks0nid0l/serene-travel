@@ -78,6 +78,31 @@
   }
   function validPhone(x) { var t = cleanText(x, 30); return t !== null && /^[0-9+().\s-]*$/.test(t); }
   function validEmail(x) { var t = cleanText(x, 80); return t !== null && (t === '' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t)); }
+  // Nhiều email CC (cách nhau bằng dấu phẩy, chấm phẩy, khoảng trắng hoặc xuống dòng) -> mảng không trùng; null nếu có email sai hoặc quá 10 email
+  var EMAIL_RE = /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/;
+  function parseEmails(text) {
+    var out = [], seen = {}, parts = String(text == null ? '' : text).split(/[\s,;]+/);
+    for (var i = 0; i < parts.length; i++) {
+      var t = parts[i];
+      if (!t) continue;
+      if (t.length > 80 || !EMAIL_RE.test(t)) return null;
+      var k = t.toLowerCase();
+      if (!seen[k]) { seen[k] = 1; out.push(t); }
+    }
+    return out.length <= 10 ? out : null;
+  }
+  // Gộp nhiều danh sách email, bỏ trùng và bỏ email đã nằm ở ô To
+  function mergeEmails(lists, exclude) {
+    var out = [], seen = {};
+    (exclude || []).forEach(function (e) { if (e) seen[String(e).toLowerCase()] = 1; });
+    (lists || []).forEach(function (l) { (l || []).forEach(function (e) { var k = String(e).toLowerCase(); if (e && !seen[k]) { seen[k] = 1; out.push(e); } }); });
+    return out;
+  }
+  // Đường dẫn soạn sẵn email trong Gmail
+  function gmailUrl(to, cc, subject, body) {
+    return 'https://mail.google.com/mail/?view=cm&fs=1&to=' + encodeURIComponent(to || '') + '&cc=' + encodeURIComponent((cc || []).join(',')) +
+      '&su=' + encodeURIComponent(subject || '') + '&body=' + encodeURIComponent(body || '');
+  }
   function validPartnerName(x) { var t = cleanText(x, 60); return t !== null && t.length >= 1; }
   // Văn bản nhiều dòng (mỗi dòng một dịch vụ) -> mảng; null nếu có dòng không hợp lệ
   function parseServices(text) {
@@ -102,6 +127,7 @@
         id: p.id, name: cleanText(p.name, 60),
         phone: validPhone(p.phone || '') ? cleanText(p.phone || '', 30) : '',
         email: validEmail(p.email || '') ? cleanText(p.email || '', 80) : '',
+        cc: parseEmails(Array.isArray(p.cc) ? p.cc.join(',') : '') || [],
         cats: cats, services: services || []
       });
     });
@@ -279,7 +305,7 @@
     buildService: buildService, svcLines: svcLines, unitsOf: unitsOf, applyNet: applyNet, netState: netState,
     statsByCat: statsByCat, csvRows: csvRows,
     NOTE_MAX: NOTE_MAX, cleanText: cleanText, validPhone: validPhone, validEmail: validEmail, validPartnerName: validPartnerName,
-    parseServices: parseServices, normalizePartners: normalizePartners, partnersForCat: partnersForCat, findPartner: findPartner
+    parseServices: parseServices, parseEmails: parseEmails, mergeEmails: mergeEmails, gmailUrl: gmailUrl, normalizePartners: normalizePartners, partnersForCat: partnersForCat, findPartner: findPartner
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.BK = api;
 })(typeof window !== 'undefined' ? window : this);
