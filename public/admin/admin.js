@@ -53,10 +53,34 @@ const placed=new Set(),nodes=[];
 for(const g of serviceGroups){const list=services.filter(x=>g.ids.includes(x.id));list.forEach(x=>placed.add(x.id));if(list.length)nodes.push(group(g.key,g.title,list.map(pageItem)))}
 const rest=services.filter(x=>!placed.has(x.id));if(rest.length)nodes.push(group('other-services','Dịch vụ khác',rest.map(pageItem)));
 if(nodes.some(Boolean))append(label('Dịch vụ',services.length),...nodes);
-const postNodes=visible(posts.map(pageItem)).map(button);if(postNodes.length)append(label('Cẩm nang',posts.length),...postNodes);
+append(button({title:'Quản lý bài viết',active:current==='manage',run:()=>open('manage')}));
+const postNodes=visible(posts.map(pageItem)).map(button);if(postNodes.length||!q){const np=document.createElement('button');np.type='button';np.className='primary new-post';np.textContent='+ Viết bài cẩm nang';np.onclick=newPost;append(label('Cẩm nang',posts.length),q?null:np,...postNodes)}
 if(!root.children.length){const p=document.createElement('p');p.className='nav-empty';p.textContent='Không tìm thấy mục nào.';root.append(p)}}
-function setBadge(item){const b=$('state-badge');if(item?.published){b.textContent='Đang hiển thị trên website';b.className='badge live'}else{b.textContent='Chưa đăng';b.className='badge draft'}}
-function open(id,force=false,sec){if(!force&&dirty&&!confirm('Có nội dung chưa lưu. Bạn muốn bỏ thay đổi?'))return;current=id;const item=items.find(x=>x.id===id),p={...(defaults.find(x=>x.id===id)||{}),...(item?.draft||{})};const settings=id==='settings';if(settings&&sec)section=sec;$('settings').hidden=!settings;$('article').hidden=settings;$('preview').hidden=settings;$('unpublish').hidden=settings||!item?.published;$('page-title').textContent=settings?(specs.find(g=>g.id===section)?.title||'Trang chủ'):(p.title||'Bài viết mới');if(settings){for(const key of Object.keys(fields))$('setting-'+key).value=p[key]||'';syncImages();showSection(section)}else{for(const key of ['title','summary','category','author','cover'])$(key).value=p[key]||'';$('body').innerHTML=p.body||'';cover()}dirty=false;range=null;$('word-status').textContent='';setBadge(item);status(item?.published?'Đang có nội dung công khai. Lưu nháp không thay đổi bản đã đăng.':'Nội dung chưa được đăng.');nav();if(!force)window.scrollTo(0,0)}
+const STATES={live:['Đã đăng','live'],draft:['Lưu nháp','draft'],hidden:['Đang ẩn','hidden']};
+const stateOf=item=>item?.published?'live':item?.draft?.hidden?'hidden':'draft';
+function setBadge(item){const b=$('state-badge'),st=STATES[stateOf(item)];b.textContent=item?.published?'Đã đăng - đang hiển thị trên website':st[0];b.className='badge '+st[1]}
+const groupOf=x=>{if(x.id.startsWith('service-'))return (serviceGroups.find(g=>g.ids.includes(x.id))||{title:'Dịch vụ khác'}).title;return x.category||'Chưa chọn mục'};
+let mState='all',mType='all',mQuery='';
+function pageData(id){const item=items.find(x=>x.id===id),p={...(defaults.find(x=>x.id===id)||{}),...(item?.draft||{})};return Object.fromEntries(['title','summary','category','author','body','cover'].map(k=>[k,p[k]||'']))}
+function renderManage(){const all=available().filter(x=>x.id!=='settings').map(x=>({...x,state:stateOf(items.find(i=>i.id===x.id)),updated:items.find(i=>i.id===x.id)?.updated||'',type:x.id.startsWith('service-')?'service':'post'}));
+const byType=all.filter(x=>mType==='all'||x.type===mType),q=norm(mQuery.trim());
+const count=k=>byType.filter(x=>k==='all'||x.state===k).length;
+const filters=$('manage-filters');filters.replaceChildren();
+for(const [k,t] of [['all','Tất cả'],['draft','Lưu nháp'],['live','Đã đăng'],['hidden','Đang ẩn']]){const b=document.createElement('button');b.type='button';b.className='chip'+(mState===k?' on':'');b.textContent=t+' ('+count(k)+')';b.setAttribute('aria-pressed',mState===k);b.onclick=()=>{mState=k;renderManage()};filters.append(b)}
+const rows=byType.filter(x=>(mState==='all'||x.state===mState)&&(!q||norm((x.title||'')+' '+groupOf(x)).includes(q))).sort((a,b)=>(b.updated||'').localeCompare(a.updated||'')||(a.title||'').localeCompare(b.title||'','vi'));
+const body=$('manage-rows');body.replaceChildren();
+for(const x of rows){const tr=document.createElement('tr');
+const td=(label,node)=>{const c=document.createElement('td');c.dataset.label=label;c.append(node);tr.append(c)};
+const name=document.createElement('button');name.type='button';name.className='row-link';name.textContent=x.title||'Bài chưa đặt tên';name.onclick=()=>open(x.id);td('Tên',name);
+td('Loại',document.createTextNode(x.type==='service'?'Dịch vụ':'Cẩm nang'));
+td('Mục',document.createTextNode(groupOf(x)));
+const st=document.createElement('span');st.className='badge '+STATES[x.state][1];st.textContent=STATES[x.state][0];td('Trạng thái',st);
+td('Cập nhật',document.createTextNode(x.updated?new Date(x.updated).toLocaleDateString('vi-VN'):'Chưa lưu'));
+const act=document.createElement('button');act.type='button';act.className='row-act';act.textContent=x.state==='live'?'Ẩn':'Đăng';act.onclick=()=>toggleState(x.id,x.state==='live'?'unpublish':'publish',act);td('Thao tác',act);
+body.append(tr)}
+$('manage-empty').hidden=rows.length>0;$('manage-table').hidden=!rows.length;$('manage-count').textContent=rows.length+' mục'}
+async function toggleState(id,mode,btn){const title=pageData(id).title||'mục này';if(!confirm(mode==='publish'?'Đăng "'+title+'" lên website để khách xem?':'Ẩn "'+title+'" khỏi website? Nội dung vẫn được giữ.'))return;btn.disabled=true;try{await api('content/'+id,'PUT',{data:pageData(id),mode});await refresh();renderManage();status(mode==='publish'?'Đã đăng "'+title+'".':'Đã ẩn "'+title+'" khỏi website.')}catch(e){error(e);btn.disabled=false}}
+function open(id,force=false,sec){if(!force&&dirty&&!confirm('Có nội dung chưa lưu. Bạn muốn bỏ thay đổi?'))return;current=id;const item=items.find(x=>x.id===id),p={...(defaults.find(x=>x.id===id)||{}),...(item?.draft||{})};const manage=id==='manage',settings=id==='settings';if(settings&&sec)section=sec;$('settings').hidden=!settings;$('article').hidden=settings||manage;$('manage').hidden=!manage;document.querySelector('.sheet').classList.toggle('managing',manage);$('preview').hidden=settings||manage;$('unpublish').hidden=settings||manage||!item?.published;$('page-title').textContent=manage?'Quản lý bài viết':settings?(specs.find(g=>g.id===section)?.title||'Trang chủ'):(p.title||'Bài viết mới');if(manage){renderManage()}else if(settings){for(const key of Object.keys(fields))$('setting-'+key).value=p[key]||'';syncImages();showSection(section)}else{for(const key of ['title','summary','category','author','cover'])$(key).value=p[key]||'';$('body').innerHTML=p.body||'';cover()}dirty=false;range=null;$('word-status').textContent='';if(!manage)setBadge(item);status(manage?'':item?.published?'Đang có nội dung công khai. Lưu nháp không thay đổi bản đã đăng.':stateOf(item)==='hidden'?'Bài đang ẩn khỏi website. Bấm Đăng lên website để hiển thị lại.':'Nội dung chưa được đăng.');nav();if(!force)window.scrollTo(0,0)}
 function cover(){const value=$('cover').value;$('cover-preview').hidden=!value;if(value)$('cover-preview').src=value;else $('cover-preview').removeAttribute('src')}
 function data(){if(current==='settings')return Object.fromEntries(Object.keys(fields).map(k=>[k,$('setting-'+k).value]));return Object.fromEntries(['title','summary','category','author','body','cover'].map(k=>[k,k==='body'?$('body').innerHTML:$(k).value]))}
 async function refresh(){items=(await api('content')).items;nav()}
@@ -69,8 +93,8 @@ $('login').onsubmit=async e=>{e.preventDefault();$('login-status').textContent='
 $('logout').onclick=async()=>{if(dirty&&!confirm('Có thay đổi chưa lưu. Vẫn đăng xuất?'))return;try{await api('logout','POST');location.reload()}catch(e){error(e)}};
 async function save(mode){if(mode==='publish'&&!confirm('Đăng nội dung này lên website để khách xem?'))return;if(mode==='unpublish'&&!confirm('Gỡ bài khỏi website? Bản nháp vẫn được giữ.'))return;const buttons=[...document.querySelectorAll('.savebar button')];buttons.forEach(x=>x.disabled=true);try{await api('content/'+current,'PUT',{data:data(),mode});dirty=false;await refresh();$('unpublish').hidden=current==='settings'||!items.find(x=>x.id===current)?.published;setBadge(items.find(x=>x.id===current));status(mode==='publish'?'Đã đăng. Mở website để kiểm tra.':mode==='unpublish'?'Đã gỡ khỏi website.':'Đã lưu bản nháp trên hệ thống.')}catch(e){error(e)}finally{buttons.forEach(x=>x.disabled=false)}}
 $('save').onclick=()=>save('draft');$('publish').onclick=()=>save('publish');$('unpublish').onclick=()=>save('unpublish');
-$('new-post').onclick=()=>{if(dirty&&!confirm('Có thay đổi chưa lưu. Bỏ thay đổi để viết bài mới?'))return;dirty=false;const id='post-'+crypto.randomUUID();defaults.push({id,title:'',body:'',author:'Serene Travel',category:'Kinh nghiệm du lịch'});open(id,true);$('title').focus()};
-document.querySelector('.sheet').addEventListener('input',()=>{dirty=true;status('Có thay đổi chưa lưu.')});
+function newPost(){if(dirty&&!confirm('Có thay đổi chưa lưu. Bỏ thay đổi để viết bài mới?'))return;dirty=false;const id='post-'+crypto.randomUUID();defaults.push({id,title:'',body:'',author:'Serene Travel',category:'Kinh nghiệm du lịch'});open(id,true);$('title').focus()}
+document.querySelector('.sheet').addEventListener('input',e=>{if(current==='manage')return;dirty=true;status('Có thay đổi chưa lưu.')});
 document.addEventListener('selectionchange',()=>{const s=getSelection();if(s.rangeCount&&$('body').contains(s.anchorNode))range=s.getRangeAt(0).cloneRange()});
 function restore(){$('body').focus();if(range){const s=getSelection();s.removeAllRanges();s.addRange(range)}}
 function changed(){dirty=true;status('Có thay đổi chưa lưu.')}
@@ -106,3 +130,5 @@ $('nav-search').oninput=nav;
 $('title').addEventListener('input',()=>{$('page-title').textContent=$('title').value||'Bài viết mới'});
 document.querySelectorAll('.more-menu button').forEach(b=>b.addEventListener('click',()=>{$('more').open=false}));
 document.addEventListener('click',e=>{if(!e.target.closest('#more'))$('more').open=false});
+$('manage-type').onchange=e=>{mType=e.target.value;renderManage()};
+$('manage-search').oninput=e=>{mQuery=e.target.value;renderManage()};
