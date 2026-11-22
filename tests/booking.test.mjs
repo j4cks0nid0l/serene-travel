@@ -99,7 +99,15 @@ test('Custom units: login required, saved once, validated',async()=>{
   assert.equal((await call('booking-settings','PUT',{partners:pa})).status,200);
   st=(await (await call('booking-settings')).json()).settings;
   assert.equal(st.partners.length,2);assert.equal(st.partners[0].name,'Khách sạn A & B');assert.deepEqual(st.partners[0].cats,['hotel']);assert.deepEqual(st.partners[0].services,['Deluxe','Suite']);
-  assert.deepEqual(st.partners[1],{id:'p2',name:'Tour C',phone:'',email:'',cats:['c1'],services:[]});
+  assert.deepEqual(st.partners[1],{id:'p2',name:'Tour C',phone:'',email:'',cc:[],cats:['c1'],services:[]});
+  // CC đối tác + CC nội bộ
+  assert.equal((await call('booking-settings','PUT',{partners:[{id:'p3',name:'D',cats:['c1'],cc:['a@x.vn','b@x.vn']}]})).status,200);
+  assert.deepEqual((await (await call('booking-settings')).json()).settings.partners[0].cc,['a@x.vn','b@x.vn']);
+  assert.equal((await call('booking-settings','PUT',{partners:[{id:'p3',name:'D',cats:['c1'],cc:['khong-hop-le']}]})).status,400);
+  assert.equal((await call('booking-settings','PUT',{ccInternal:['ketoan@x.vn','dh@x.vn']})).status,200);
+  assert.deepEqual((await (await call('booking-settings')).json()).settings.ccInternal,['ketoan@x.vn','dh@x.vn']);
+  assert.equal((await call('booking-settings','PUT',{ccInternal:['sai']})).status,400);
+  assert.equal((await call('booking-settings','PUT',{partners:pa})).status,200);
   assert.equal(st.categories.length,2);assert.equal(st.slipNote,'Giữ nguyên');assert.deepEqual(st.unitHide,{'vé':['hotel','c1']});
   const p0=pa[0];
   for(const bad of ['x',null,{},[null],[{...p0,id:'A'}],[{...p0,id:'a/b'}],[{...p0,name:''}],[{...p0,name:'<b>'}],[{...p0,name:'x'.repeat(61)}],[{...p0,phone:'abc'}],[{...p0,phone:'1'.repeat(31)}],[{...p0,email:'a@b'}],[{...p0,cats:'hotel'}],[{...p0,cats:['A B']}],[{...p0,services:'x'}],[{...p0,services:['<i>']}],[{...p0,services:['x'.repeat(81)]}],[{...p0,services:Array.from({length:101},(_,i)=>'d'+i)}],[p0,{...pa[1],id:'p1'}],[p0,{...pa[1],name:'KHÁCH SẠN A & B'}],Array.from({length:301},(_,i)=>({id:'k'+i,name:'N'+i,cats:[]}))])

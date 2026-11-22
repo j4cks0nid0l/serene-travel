@@ -30,6 +30,12 @@ function cleanBookingCategories(v){
  }
  return out
 }
+function cleanEmailList(v){
+ if(v===undefined)return [];
+ if(!Array.isArray(v)||v.length>10)return null;
+ const out=[],seen=new Set();
+ for(const e of v){if(typeof e!=='string'||e.length>80||!/^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(e))return null;const k=e.toLowerCase();if(!seen.has(k)){seen.add(k);out.push(e)}}
+ return out}
 function cleanBookingPartners(v){
  if(!Array.isArray(v)||v.length>300)return null;
  const t=(x,max)=>{if(typeof x!=='string')return null;const y=x.trim().replace(/\s+/g,' ');return y.length>max||/[<>]/.test(y)?null:y};
@@ -39,11 +45,12 @@ function cleanBookingPartners(v){
   const name=t(p.name,60);if(!name)return null;
   const phone=p.phone===undefined?'':t(p.phone,30);if(phone===null||!/^[0-9+().\s-]*$/.test(phone))return null;
   const email=p.email===undefined?'':t(p.email,80);if(email===null||(email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)))return null;
+  const cc=cleanEmailList(p.cc);if(!cc)return null;
   if(!Array.isArray(p.cats)||p.cats.length>20||!p.cats.every(x=>typeof x==='string'&&BOOKING_ID_RE.test(x)))return null;
   if(p.services!==undefined&&(!Array.isArray(p.services)||p.services.length>100))return null;
   const services=[];for(const s of p.services||[]){const x=t(s,80);if(!x)return null;if(!services.includes(x))services.push(x)}
   if(names.has(name.toLowerCase()))return null;
-  ids.add(p.id);names.add(name.toLowerCase());out.push({id:p.id,name,phone,email,cats:[...new Set(p.cats)],services})
+  ids.add(p.id);names.add(name.toLowerCase());out.push({id:p.id,name,phone,email,cc,cats:[...new Set(p.cats)],services})
  }
  return JSON.stringify(out).length>300000?null:out
 }
@@ -229,7 +236,7 @@ if(path==='/api/booking-units'){
 if(path==='/api/booking-settings'){
  if(!env.BOOKINGS)return json({error:'Chưa kết nối kho đơn hàng.'},503);
  try{
-  if(req.method==='GET'){const {results}=await env.BOOKINGS.prepare('SELECT key,value FROM booking_settings').all();const out={};for(const r of results)out[r.key]=r.value;const parse=k=>{try{return out[k]?JSON.parse(out[k]):null}catch{return null}};return json({settings:{slipNote:out.slipNote||'',categories:parse('categories'),unitHide:parse('unitHide')||{},partners:parse('partners')||[]}})}
+  if(req.method==='GET'){const {results}=await env.BOOKINGS.prepare('SELECT key,value FROM booking_settings').all();const out={};for(const r of results)out[r.key]=r.value;const parse=k=>{try{return out[k]?JSON.parse(out[k]):null}catch{return null}};return json({settings:{slipNote:out.slipNote||'',categories:parse('categories'),unitHide:parse('unitHide')||{},partners:parse('partners')||[],ccInternal:parse('ccInternal')||[]}})}
   if(req.method==='PUT'){
    let input;try{input=await req.json()}catch{return json({error:'Nội dung không hợp lệ.'},400)}
    if(!input||typeof input!=='object'||Array.isArray(input))return json({error:'Nội dung không hợp lệ.'},400);
@@ -250,6 +257,10 @@ if(path==='/api/booking-settings'){
    if(input.partners!==undefined){
     const ps=cleanBookingPartners(input.partners);if(!ps)return json({error:'Danh sách đối tác không hợp lệ.'},400);
     writes.push(['partners',JSON.stringify(ps)])
+   }
+   if(input.ccInternal!==undefined){
+    const cc=cleanEmailList(input.ccInternal);if(!cc)return json({error:'Danh sách email CC không hợp lệ (tối đa 10 email).'},400);
+    writes.push(['ccInternal',JSON.stringify(cc)])
    }
    if(!writes.length)return json({error:'Không có gì để lưu.'},400);
    for(const [k,v] of writes)await env.BOOKINGS.prepare('INSERT INTO booking_settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(k,v).run();return json({ok:true})

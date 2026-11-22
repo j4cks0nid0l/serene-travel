@@ -157,3 +157,22 @@ test('Đối tác: chuẩn hóa danh sách và lọc theo loại dịch vụ',()
  assert.equal(BK.findPartner(list,'p2').name,'Tour B');assert.equal(BK.findPartner(list,'zz'),null);
  same(BK.normalizePartners(null),[]);
 });
+
+test('email CC: parseEmails, mergeEmails, gmailUrl',()=>{
+ same(BK.parseEmails(''),[]);
+ same(BK.parseEmails('a@x.vn, B@y.vn; a@X.vn\nc@z.vn'),['a@x.vn','B@y.vn','c@z.vn']);
+ assert.equal(BK.parseEmails('khong-phai-email'),null);
+ assert.equal(BK.parseEmails('a@x.vn, loi'),null);
+ assert.equal(BK.parseEmails(Array.from({length:11},(_,i)=>'u'+i+'@x.vn').join(',')),null);
+ same(BK.mergeEmails([['a@x.vn','b@x.vn'],['B@x.vn','c@x.vn'],null],['a@x.vn']),['b@x.vn','c@x.vn']);
+ const u=BK.gmailUrl('to@x.vn',['c1@x.vn','c2@x.vn'],'Tiêu đề & thử','Dòng 1\nDòng 2');
+ const q=new URL(u).searchParams;
+ assert.equal(new URL(u).host,'mail.google.com');
+ assert.equal(q.get('to'),'to@x.vn');assert.equal(q.get('cc'),'c1@x.vn,c2@x.vn');
+ assert.equal(q.get('su'),'Tiêu đề & thử');assert.equal(q.get('body'),'Dòng 1\nDòng 2');
+ assert.equal(new URL(BK.gmailUrl('',[],'s','b')).searchParams.get('to'),'');
+});
+test('đối tác có cc',()=>{
+ const l=BK.normalizePartners([{id:'p1',name:'A',email:'a@x.vn',cc:['q@x.vn','t@x.vn']},{id:'p2',name:'B',cc:['bad']}]);
+ same(l[0].cc,['q@x.vn','t@x.vn']);same(l[1].cc,[]);
+});
