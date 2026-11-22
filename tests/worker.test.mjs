@@ -22,6 +22,13 @@ assert.equal((await call('content/post-example','PUT',{data,mode:'publish'})).st
 let published=(await (await call('public')).json()).items.find(x=>x.id==='post-example');assert.equal(published.title,data.title);assert.ok(!published.body.includes('script'));assert.ok(!published.body.includes('onerror'));assert.ok(published.body.includes('<b>Serene</b>'));
 assert.equal((await call('content/post-example','PUT',{data:{...data,title:'Private draft'},mode:'draft'})).status,200);published=(await (await call('public')).json()).items.find(x=>x.id==='post-example');assert.equal(published.title,data.title);
 assert.equal((await call('content/post-example','PUT',{data,mode:'unpublish'})).status,200);assert.equal((await (await call('public')).json()).items.some(x=>x.id==='post-example'),false);
+{const list=async()=>(await (await call('content')).json()).items.find(x=>x.id==='post-example');
+let it=await list();assert.equal(it.draft.hidden,true,'gỡ bài thì đánh dấu đang ẩn');assert.equal(it.published,null);
+assert.equal((await call('content/post-example','PUT',{data,mode:'draft'})).status,200);it=await list();assert.equal(it.draft.hidden,true,'lưu nháp khi đang ẩn vẫn là ẩn');
+assert.equal((await call('content/post-example','PUT',{data,mode:'publish'})).status,200);it=await list();assert.ok(!it.draft.hidden&&it.published,'đăng lại thì hết ẩn');
+assert.equal((await call('content/post-example','PUT',{data:{...data,title:'Sửa khi đang đăng'},mode:'draft'})).status,200);it=await list();assert.ok(!it.draft.hidden&&it.published);
+assert.equal((await (await call('public')).json()).items.find(x=>x.id==='post-example').hidden,undefined,'bản công khai không có dấu ẩn');
+assert.equal((await call('content/post-example','PUT',{data,mode:'unpublish'})).status,200)}
 assert.equal((await call('content/settings','PUT',{data:{phone:'0327 818 196',company:'Serene test',homeCard1Title:'Combo Vinpearl'},mode:'publish'})).status,200);
 assert.equal((await (await call('public')).json()).items.find(x=>x.id==='settings').homeCard1Title,'Combo Vinpearl');
 assert.equal((await call('content/settings','PUT',{data:{heroImage:'javascript:bad'},mode:'publish'})).status,400);
