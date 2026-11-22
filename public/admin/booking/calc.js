@@ -103,6 +103,17 @@
     return 'https://mail.google.com/mail/?view=cm&fs=1&to=' + encodeURIComponent(to || '') + '&cc=' + encodeURIComponent((cc || []).join(',')) +
       '&su=' + encodeURIComponent(subject || '') + '&body=' + encodeURIComponent(body || '');
   }
+  function mailQuery(cc, subject, body) {
+    return 'cc=' + encodeURIComponent((cc || []).join(',')) + '&subject=' + encodeURIComponent(subject || '') + '&body=' + encodeURIComponent(body || '');
+  }
+  // Mở thẳng app Gmail trên iPhone
+  function gmailAppUrl(to, cc, subject, body) {
+    return 'googlegmail:///co?to=' + encodeURIComponent(to || '') + '&' + mailQuery(cc, subject, body);
+  }
+  // Mở app thư mặc định (thường là Gmail trên Android)
+  function mailtoUrl(to, cc, subject, body) {
+    return 'mailto:' + (to || '') + '?' + mailQuery(cc, subject, body);
+  }
   function validPartnerName(x) { var t = cleanText(x, 60); return t !== null && t.length >= 1; }
   // Văn bản nhiều dòng (mỗi dòng một dịch vụ) -> mảng; null nếu có dòng không hợp lệ
   function parseServices(text) {
@@ -305,7 +316,7 @@
     buildService: buildService, svcLines: svcLines, unitsOf: unitsOf, applyNet: applyNet, netState: netState,
     statsByCat: statsByCat, csvRows: csvRows,
     NOTE_MAX: NOTE_MAX, cleanText: cleanText, validPhone: validPhone, validEmail: validEmail, validPartnerName: validPartnerName,
-    parseServices: parseServices, parseEmails: parseEmails, mergeEmails: mergeEmails, gmailUrl: gmailUrl, normalizePartners: normalizePartners, partnersForCat: partnersForCat, findPartner: findPartner
+    parseServices: parseServices, parseEmails: parseEmails, mergeEmails: mergeEmails, gmailUrl: gmailUrl, gmailAppUrl: gmailAppUrl, mailtoUrl: mailtoUrl, normalizePartners: normalizePartners, partnersForCat: partnersForCat, findPartner: findPartner
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.BK = api;
 })(typeof window !== 'undefined' ? window : this);
