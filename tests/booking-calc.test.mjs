@@ -176,3 +176,13 @@ test('đối tác có cc',()=>{
  const l=BK.normalizePartners([{id:'p1',name:'A',email:'a@x.vn',cc:['q@x.vn','t@x.vn']},{id:'p2',name:'B',cc:['bad']}]);
  same(l[0].cc,['q@x.vn','t@x.vn']);same(l[1].cc,[]);
 });
+
+test('link mở app mail trên điện thoại',()=>{
+ const a=BK.gmailAppUrl('to@x.vn',['c@x.vn'],'Tiêu đề & thử','Dòng 1\nDòng 2');
+ assert.ok(a.startsWith('googlegmail:///co?'));
+ const q=new URL(a.replace('googlegmail:///co','http://h/co')).searchParams;
+ assert.equal(q.get('to'),'to@x.vn');assert.equal(q.get('cc'),'c@x.vn');assert.equal(q.get('subject'),'Tiêu đề & thử');assert.equal(q.get('body'),'Dòng 1\nDòng 2');
+ const m=BK.mailtoUrl('to@x.vn',['c@x.vn'],'S','B');
+ assert.equal(m,'mailto:to@x.vn?cc=c%40x.vn&subject=S&body=B');
+ assert.equal(BK.mailtoUrl('',[],'S','B'),'mailto:?cc=&subject=S&body=B');
+});
