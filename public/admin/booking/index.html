@@ -294,6 +294,7 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
       <button class="sb-sub-item active" data-sub="cats" onclick="go('settings','cats')">Loại dịch vụ</button>
       <button class="sb-sub-item" data-sub="units" onclick="go('settings','units')">Đơn vị tính</button>
       <button class="sb-sub-item" data-sub="partners" onclick="go('settings','partners')">Đối tác</button>
+      <button class="sb-sub-item" data-sub="hotels" onclick="go('settings','hotels')">Thông tin khách sạn</button>
       <button class="sb-sub-item" data-sub="note" onclick="go('settings','note')">Ghi chú cuối phiếu</button>
       <button class="sb-sub-item" data-sub="data" onclick="go('settings','data')">Dữ liệu</button>
     </div>
@@ -411,6 +412,18 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
       <button class="btn-outline" style="width:100%;margin-top:8px" onclick="partnerAdd()"><i class="ti ti-plus"></i>Thêm đối tác</button>
     </div>
     <div style="font-size:11px;color:#7A8FA0;margin-top:6px">Tên đối tác chỉ để bạn xem trong app, không in lên phiếu hay tin Zalo gửi khách. Khi nhập booking, danh sách đối tác hiện theo loại dịch vụ đã chọn. Xóa đối tác không làm đổi các đơn đã tạo.</div>
+  </div>
+  <div class="card set-page" data-page="hotels">
+    <div class="sec-title"><i class="ti ti-building"></i>Thông tin khách sạn</div>
+    <div id="hotel-list"></div>
+    <div style="margin-top:10px;padding-top:10px;border-top:.5px dashed rgba(58,125,153,.25)">
+      <label>Thêm khách sạn/resort</label>
+      <input id="ht-new-name" maxlength="120" placeholder="Tên khách sạn/resort (VD: VINPEARL RESORT &amp; SPA NHA TRANG BAY)" style="margin-bottom:8px">
+      <input id="ht-new-addr" maxlength="200" placeholder="Địa chỉ" style="margin-bottom:8px">
+      <input id="ht-new-phone" maxlength="80" placeholder="Số điện thoại (VD: 02583 598 999 -> Phím 1 -> Phím 2)" style="margin-bottom:8px">
+      <button class="btn-outline" style="width:100%" onclick="hotelAdd()"><i class="ti ti-plus"></i>Thêm</button>
+    </div>
+    <div style="font-size:11px;color:#7A8FA0;margin-top:6px">Nhập một lần, khi gửi Booking code cho khách app tự điền địa chỉ và số điện thoại. App nhận ra khách sạn khi tên dịch vụ trong đơn bắt đầu bằng tên khách sạn ở đây.</div>
   </div>
   <div class="card set-page" data-page="note">
     <div class="sec-title"><i class="ti ti-note"></i>Ghi chú cuối phiếu</div>
@@ -777,6 +790,49 @@ async function removeUnit(name){
 let slipNote="";
 let partners=[];
 let ccInternal=[];
+// ── Thông tin khách sạn (địa chỉ, SĐT) để gửi Booking code ──
+let hotels=[];
+const hkey=n=>String(n||"").trim().toLowerCase().replace(/\s+/g," ");
+function findHotel(svcName){
+  const seg=hkey(String(svcName||"").split(" - ")[0]); if(!seg) return null;
+  let best=null;
+  hotels.forEach(h=>{ const k=hkey(h.name); if(k&&(seg===k||seg.includes(k)||k.includes(seg))&&(!best||k.length>hkey(best.name).length)) best=h; });
+  return best;
+}
+function cleanHotelInput(n,a,p){
+  const t=(x,max)=>{ const y=String(x||"").trim().replace(/\s+/g," "); return y.length>max||/[<>]/.test(y)?null:y; };
+  const name=t(n,120),addr=t(a,200),phone=t(p,80);
+  if(!name) return {error:"Nhập tên khách sạn (tối đa 120 ký tự, không dùng < >)"};
+  if(addr===null||phone===null) return {error:"Địa chỉ hoặc số điện thoại quá dài hoặc có ký tự không hợp lệ"};
+  return {name,address:addr,phone};
+}
+function renderHotels(){
+  const box=$("hotel-list"); if(!box) return;
+  box.innerHTML=hotels.length?hotels.map((h,i)=>`<div class="cat-item" style="margin-bottom:10px">
+    <input id="ht-n-${i}" maxlength="120" value="${escAttr(h.name)}" style="margin-bottom:6px;font-weight:600">
+    <input id="ht-a-${i}" maxlength="200" value="${escAttr(h.address)}" placeholder="Địa chỉ" style="margin-bottom:6px">
+    <input id="ht-p-${i}" maxlength="80" value="${escAttr(h.phone)}" placeholder="Số điện thoại" style="margin-bottom:6px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><button class="btn-outline" onclick="hotelSave(${i})">Lưu</button><button class="btn-outline btn-danger" onclick="hotelDel(${i})">Xóa</button></div></div>`).join(""):'<div style="font-size:13px;color:#7A8FA0;margin-bottom:8px">Chưa có khách sạn nào.</div>';
+}
+async function hotelAdd(){
+  const r=cleanHotelInput($("ht-new-name").value,$("ht-new-addr").value,$("ht-new-phone").value);
+  if(r.error){ toast(r.error,4000); return; }
+  if(hotels.some(h=>hkey(h.name)===hkey(r.name))){ toast("Khách sạn này đã có trong danh sách",4000); return; }
+  const next=[...hotels,r];
+  if(await saveSetting({hotels:next},"Đã thêm khách sạn")){ hotels=next; ["ht-new-name","ht-new-addr","ht-new-phone"].forEach(x=>$(x).value=""); renderHotels(); }
+}
+async function hotelSave(i){
+  const r=cleanHotelInput($("ht-n-"+i).value,$("ht-a-"+i).value,$("ht-p-"+i).value);
+  if(r.error){ toast(r.error,4000); return; }
+  if(hotels.some((h,j)=>j!==i&&hkey(h.name)===hkey(r.name))){ toast("Đã có khách sạn tên này",4000); return; }
+  const next=hotels.map((h,j)=>j===i?r:h);
+  if(await saveSetting({hotels:next},"Đã lưu")){ hotels=next; renderHotels(); }
+}
+async function hotelDel(i){
+  if(!confirm("Xóa khách sạn này khỏi danh sách? Các đơn đã có mã không bị ảnh hưởng.")) return;
+  const next=hotels.filter((h,j)=>j!==i);
+  if(await saveSetting({hotels:next},"Đã xóa")){ hotels=next; renderHotels(); }
+}
 async function loadSettings(){
   try{
     const d=await apiBooking("GET", undefined, "/api/booking-settings");
@@ -785,6 +841,7 @@ async function loadSettings(){
     catList=BK.normalizeCats(st.categories);
     unitHide=st.unitHide&&typeof st.unitHide==="object"?st.unitHide:{};
     partners=BK.normalizePartners(st.partners);
+    hotels=Array.isArray(st.hotels)?st.hotels:[]; renderHotels();
     ccInternal=BK.parseEmails((st.ccInternal||[]).join(","))||[];
     const ci=$("set-cc-internal"); if(ci) ci.value=ccInternal.join(", ");
     refreshAllChips(); refreshUnitSelects(); refreshAllPartners();
@@ -1439,6 +1496,12 @@ function showDetail(id){
     <div id="profit-summary-${id}" style="margin-top:10px"></div>
   </div>
 
+  <div class="card">
+    <div class="sec-title"><i class="ti ti-ticket"></i>Mã đặt chỗ (Booking code)</div>
+    ${b.svcs.map((s,si)=>`<div style="margin-bottom:10px"><label style="font-size:11px;color:#7A8FA0;display:block;margin-bottom:3px">${esc(s.name)}</label><input id="edit-code-${id}-${si}" maxlength="60" placeholder="Chưa có mã" value="${escAttr(s.code||"")}" style="padding:7px 10px;font-size:13px;font-family:inherit;border:.5px solid rgba(58,125,153,.2);border-radius:7px;background:#fff;color:#2C3E50;width:100%"></div>`).join("")}
+    <button class="btn-main" style="margin-top:4px" onclick="saveCodes('${id}')"><i class="ti ti-device-floppy"></i>Lưu mã đặt chỗ</button>
+  </div>
+
   ${sendPanelHtml(b)}`;
   setTimeout(()=>$("detail-wrap").scrollIntoView({behavior:"smooth",block:"nearest"}),80);
 }
@@ -1494,6 +1557,25 @@ function markComplete(id) {
   renderList(); showDetail(id);
 }
 
+function saveCodes(id){
+  const b=bookings.find(x=>x.id===id); if(!b) return;
+  b.svcs.forEach((s,si)=>{ const el=document.getElementById("edit-code-"+id+"-"+si); if(!el) return; const v=el.value.trim().replace(/[<>]/g,"").slice(0,60); if(v) s.code=v; else delete s.code; });
+  saveBooking(b); showDetail(id); toast("Đã lưu mã đặt chỗ");
+}
+function bookingCodeText(b){
+  const missing=[];
+  const blocks=b.svcs.filter(s=>s.code).map(s=>{
+    const h=findHotel(s.name);
+    const name=h?h.name:String(s.name).split(" - ")[0];
+    const lines=[name];
+    if(h&&h.address) lines.push("Địa chỉ: "+h.address);
+    if(h&&h.phone) lines.push("Số điện thoại: "+h.phone);
+    if(!h||!h.address||!h.phone) missing.push(name);
+    lines.push("BOOKING CODE: "+s.code);
+    return lines.join("\n");
+  });
+  return {text:blocks.join("\n\n"),missing};
+}
 function saveNetPrices(id) {
   const b=bookings.find(x=>x.id===id); if(!b) return;
   b.svcs.forEach((s,si)=>{
@@ -1816,6 +1898,14 @@ function doSendPartner(id,si,kind){
 // Gửi khách hàng
 function askSendCust(id,kind){
   const b=bookings.find(x=>x.id===id); if(!b) return;
+  if(kind==="code"){
+    const r=bookingCodeText(b);
+    if(!r.text){ toast("Chưa nhập mã đặt chỗ nào cho đơn này",4000); return; }
+    return askConfirm("Đồng ý gửi Booking code cho khách hàng?",async()=>{
+      try{ await navigator.clipboard.writeText(r.text); toast(r.missing.length?"Đã sao chép. Thiếu địa chỉ hoặc SĐT của: "+r.missing.join(", ")+". Thêm ở Thiết lập > Thông tin khách sạn":"Đã sao chép Booking code",r.missing.length?7000:4000); markSent(id,null,"code"); }
+      catch(e){ toast("Sao chép thất bại"); }
+    });
+  }
   if(kind==="slip") askConfirm("Đồng ý gửi phiếu xác nhận dịch vụ cho khách hàng?",()=>openModal("Gửi phiếu xác nhận <b>"+esc(id)+"</b> bằng cách nào?",[
     {label:"Tải ảnh",main:true,fn:async()=>{ if(await saveSlipImage(id)) markSent(id,null,"slip"); }},
     {label:"Sao chép ảnh",main:true,fn:async()=>{ if(await copySlipImage(id)) markSent(id,null,"slip"); }},
@@ -1833,7 +1923,7 @@ function sentTitle(o){ return Object.keys(o||{}).map(k=>k+": "+o[k]).join(", ");
 function toggleSendTab(k){ sendTab=sendTab===k?"":k; const b=bookings.find(x=>x.id===sendFor); if(b) showDetail(b.id); }
 function sendPanelHtml(b){
   const id=b.id;
-  const anyP=b.svcs.some(s=>s.sent&&(s.sent.email||s.sent.zalo)), anyC=!!(b.sent&&(b.sent.slip||b.sent.msg));
+  const anyP=b.svcs.some(s=>s.sent&&(s.sent.email||s.sent.zalo)), anyC=!!(b.sent&&(b.sent.slip||b.sent.msg||b.sent.code));
   const tab=(k,label,dot)=>`<button type="button" class="send-tab${sendTab===k?" on":""}" onclick="toggleSendTab('${k}')" aria-expanded="${sendTab===k}">${label}${dot?'<span class="sent-dot" title="Đã gửi"></span>':""}</button>`;
   let panel="";
   if(sendTab==="partner"){
@@ -1844,9 +1934,9 @@ function sendPanelHtml(b){
       <div class="send-btns"><button class="btn-outline" onclick="askSendPartner('${id}',${si},'email')">Gửi Email</button><button class="btn-outline" onclick="askSendPartner('${id}',${si},'zalo')">Gửi tin nhắn Zalo</button></div></div>`;
     }).join("")+'<div class="send-hint">Mỗi dịch vụ gửi riêng cho đúng đối tác. Cần nhập giá net ở mục trên trước.</div>';
   } else if(sendTab==="customer"){
-    const st=sentLabel(b.sent,{slip:"phiếu xác nhận",msg:"tin nhắn xác nhận"}), done=st!=="Chưa gửi";
+    const st=sentLabel(b.sent,{slip:"phiếu xác nhận",msg:"tin nhắn xác nhận",code:"Booking code"}), done=st!=="Chưa gửi";
     panel=`<div class="send-row"><div class="send-status${done?" ok":""}" title="${escAttr(sentTitle(b.sent))}">${done?"Đã gửi "+st:st}</div>
-      <div class="send-btns"><button class="btn-outline" onclick="askSendCust('${id}','slip')">Phiếu xác nhận</button><button class="btn-outline" onclick="askSendCust('${id}','msg')">Tin nhắn xác nhận</button></div></div>`;
+      <div class="send-btns"><button class="btn-outline" onclick="askSendCust('${id}','slip')">Phiếu xác nhận</button><button class="btn-outline" onclick="askSendCust('${id}','msg')">Tin nhắn xác nhận</button><button class="btn-outline" style="grid-column:1/-1" onclick="askSendCust('${id}','code')">Booking code</button></div></div>`;
   } else if(sendTab==="options"){
     panel=`<div class="send-row"><div class="act-row" style="margin-top:0">
       <button class="btn-outline" onclick="editBooking('${id}')"><i class="ti ti-edit"></i>Sửa đơn</button>

@@ -38,6 +38,12 @@ function cleanEmailList(v){
  const out=[],seen=new Set();
  for(const e of v){if(typeof e!=='string'||e.length>80||!/^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(e))return null;const k=e.toLowerCase();if(!seen.has(k)){seen.add(k);out.push(e)}}
  return out}
+function cleanBookingHotels(v){
+ if(!Array.isArray(v)||v.length>500)return null;
+ const t=(x,max)=>{if(typeof x!=='string')return null;const y=x.trim().replace(/\s+/g,' ');return y.length>max||/[<>]/.test(y)?null:y};
+ const out=[],names=new Set();
+ for(const h of v){if(!h||typeof h!=='object')return null;const name=t(h.name,120),address=t(h.address??'',200),phone=t(h.phone??'',80);if(!name||address===null||phone===null)return null;const k=name.toLowerCase();if(names.has(k))return null;names.add(k);out.push({name,address,phone})}
+ return out}
 function cleanBookingPartners(v){
  if(!Array.isArray(v)||v.length>300)return null;
  const t=(x,max)=>{if(typeof x!=='string')return null;const y=x.trim().replace(/\s+/g,' ');return y.length>max||/[<>]/.test(y)?null:y};
@@ -238,7 +244,7 @@ if(path==='/api/booking-units'){
 if(path==='/api/booking-settings'){
  if(!env.BOOKINGS)return json({error:'Chưa kết nối kho đơn hàng.'},503);
  try{
-  if(req.method==='GET'){const {results}=await env.BOOKINGS.prepare('SELECT key,value FROM booking_settings').all();const out={};for(const r of results)out[r.key]=r.value;const parse=k=>{try{return out[k]?JSON.parse(out[k]):null}catch{return null}};return json({settings:{slipNote:out.slipNote||'',categories:parse('categories'),unitHide:parse('unitHide')||{},partners:parse('partners')||[],ccInternal:parse('ccInternal')||[]}})}
+  if(req.method==='GET'){const {results}=await env.BOOKINGS.prepare('SELECT key,value FROM booking_settings').all();const out={};for(const r of results)out[r.key]=r.value;const parse=k=>{try{return out[k]?JSON.parse(out[k]):null}catch{return null}};return json({settings:{slipNote:out.slipNote||'',categories:parse('categories'),unitHide:parse('unitHide')||{},partners:parse('partners')||[],ccInternal:parse('ccInternal')||[],hotels:parse('hotels')||[]}})}
   if(req.method==='PUT'){
    let input;try{input=await req.json()}catch{return json({error:'Nội dung không hợp lệ.'},400)}
    if(!input||typeof input!=='object'||Array.isArray(input))return json({error:'Nội dung không hợp lệ.'},400);
@@ -259,6 +265,10 @@ if(path==='/api/booking-settings'){
    if(input.partners!==undefined){
     const ps=cleanBookingPartners(input.partners);if(!ps)return json({error:'Danh sách đối tác không hợp lệ.'},400);
     writes.push(['partners',JSON.stringify(ps)])
+   }
+   if(input.hotels!==undefined){
+    const hs=cleanBookingHotels(input.hotels);if(!hs)return json({error:'Danh sách khách sạn không hợp lệ.'},400);
+    writes.push(['hotels',JSON.stringify(hs)])
    }
    if(input.ccInternal!==undefined){
     const cc=cleanEmailList(input.ccInternal);if(!cc)return json({error:'Danh sách email CC không hợp lệ (tối đa 10 email).'},400);
