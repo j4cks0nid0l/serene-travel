@@ -1,6 +1,7 @@
 const $=id=>document.getElementById(id);
 const MAX_IMAGES=10;
-let csrf='',posts=[],nowText='',filter='',target=null;
+let csrf='',posts=[],nowText='',filter='',target=null,rescheduling=false;
+const editing=new Set();
 const drafts=new Map();
 const TABS=[['NHÁP','Chờ duyệt'],['ĐÃ DUYỆT','Đã hẹn giờ'],['ĐÃ ĐĂNG','Đã đăng'],['LỖI','Lỗi'],['ALL','Tất cả']];
 const STATUS_PILL={'NHÁP':['Chờ duyệt','draft'],'ĐÃ DUYỆT':['Đã hẹn giờ','ok'],'ĐÃ ĐĂNG':['Đã đăng','done'],'ĐANG ĐĂNG':['Đang đăng','ok'],'LỖI':['Lỗi','err']};
@@ -36,7 +37,7 @@ function el(tag,cls,text){const e=document.createElement(tag);if(cls)e.className
 function button(label,cls,onclick){const b=el('button',cls||'',label);b.type='button';b.onclick=onclick;return b}
 async function run(buttons,job){buttons.forEach(b=>b.disabled=true);try{await job()}catch(e){show(e.message)}finally{buttons.forEach(b=>{b.disabled=false})}}
 function card(p){
- const editable=p.status==='NHÁP'||p.status==='LỖI';
+ const editable=p.status==='NHÁP'||p.status==='LỖI',typing=editable&&editing.has(p.id);
  const box=el('article','post');box.dataset.id=p.id;
  const head=el('div','post-head');
  head.append(el('span','pill'+(p.platform==='THREADS'?' threads':''),p.platform==='THREADS'?'Threads':'Facebook'));
@@ -47,10 +48,10 @@ function card(p){
  if(p.status==='LỖI'&&p.error)box.append(el('p','err-text',p.error));
  const c=current(p);
  const row=el('div','row2');
- const l1=el('label','','Khách sạn / nguồn');const src=el('input');src.maxLength=200;src.value=c.source;src.readOnly=!editable;l1.append(src);
- const l2=el('label','','Ghi chú của tôi');const note=el('input');note.maxLength=500;note.value=c.note;note.readOnly=!editable;l2.append(note);
+ const l1=el('label','','Khách sạn / nguồn');const src=el('input');src.maxLength=200;src.value=c.source;src.readOnly=!typing;l1.append(src);
+ const l2=el('label','','Ghi chú của tôi');const note=el('input');note.maxLength=500;note.value=c.note;note.readOnly=!typing;l2.append(note);
  row.append(l1,l2);box.append(row);
- const lb=el('label','','Nội dung bài');const ta=el('textarea');ta.maxLength=8000;ta.value=c.body;ta.readOnly=!editable;ta.rows=9;lb.append(ta);box.append(lb);
+ const lb=el('label','','Nội dung bài');const ta=el('textarea');ta.maxLength=8000;ta.value=c.body;ta.readOnly=!typing;ta.rows=9;lb.append(ta);box.append(lb);
  const count=el('p','count');const updateCount=()=>{const n=[...ta.value].length;count.textContent=p.platform==='THREADS'?n+'/500 ký tự (Threads thường giới hạn 500)':n+' ký tự';count.classList.toggle('warn',p.platform==='THREADS'&&n>500)};updateCount();box.append(count);
  const remember=()=>{const next={body:ta.value,source:src.value,note:note.value};if(next.body===p.body&&next.source===p.source&&next.note===p.note)drafts.delete(p.id);else drafts.set(p.id,next)};
  for(const f of [ta,src,note])f.addEventListener('input',()=>{remember();updateCount()});
@@ -84,9 +85,13 @@ function card(p){
   box.append(wrap)}
  const actions=el('div','actions');
  if(editable){
-  const save=button('Lưu sửa','',()=>run([save],async()=>{await api('posts/'+p.id,'PUT',{data:edits(p)});drafts.delete(p.id);await load();show('Đã lưu.')}));
   const sched=button('Hẹn giờ đăng','primary',()=>openSchedule(p));
-  actions.append(sched,save)}
+  actions.append(sched);
+  if(!typing)actions.append(button('Sửa bài','',()=>{editing.add(p.id);render()}));
+  else{
+   const save=button('Lưu sửa','',()=>run([save],async()=>{const c=edits(p),r=await api('posts/'+p.id,'PUT',{data:c});drafts.delete(p.id);editing.delete(p.id);await load();showReport(p,c,r.original);show('Đã lưu.')}));
+   actions.append(save,button('Hủy sửa','',()=>{drafts.delete(p.id);editing.delete(p.id);render()}))}}
+ if(p.status==='ĐÃ DUYỆT')actions.append(button('Đổi giờ','primary',()=>openSchedule(p,true)));
  if(p.status==='ĐÃ DUYỆT')actions.append(button('Bỏ hẹn giờ','',function(){run([this],async()=>{await api('posts/'+p.id,'PUT',{action:'unapprove',data:{}});filter='NHÁP';await load();show('Đã bỏ hẹn giờ, bài về mục Chờ duyệt.')})}));
  if(p.status==='LỖI')actions.append(button('Đưa về chờ duyệt','',function(){run([this],async()=>{await api('posts/'+p.id,'PUT',{action:'unapprove',data:{}});filter='NHÁP';await load()})}));
  actions.append(button('Sao chép','',async()=>{try{await navigator.clipboard.writeText(ta.value);show('Đã sao chép nội dung bài.')}catch{ta.select();show('Chưa sao chép tự động được. Nội dung đã được chọn, bấm Ctrl+C.')}}));
@@ -107,8 +112,8 @@ async function prepareImage(file){
  if(!blob||blob.size>5*1024*1024)throw Error('Ảnh vẫn quá lớn sau khi thu nhỏ. Hãy chọn ảnh khác.');
  return blob}
 function times(){const out=[];for(let m=7*60;m<=22*60;m+=30)out.push(String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'));return out}
-function openSchedule(p){
- target=p;const today=nowText.slice(0,10),tomorrow=clock(epoch(nowText)+24*3600000).slice(0,10);
+function openSchedule(p,again=false){
+ target=p;rescheduling=again;$('schedule-title').textContent=again?'Đổi giờ đăng':'Hẹn giờ đăng';const today=nowText.slice(0,10),tomorrow=clock(epoch(nowText)+24*3600000).slice(0,10);
  const date=$('schedule-date');date.min=today;date.value=p.scheduled_at&&p.scheduled_at.slice(0,10)>=today?p.scheduled_at.slice(0,10):tomorrow;
  $('schedule-custom').value='';drawChips();$('schedule-dialog').showModal()}
 function tooSoon(day,time){return epoch(day+' '+time)<Date.now()+5*60000}
@@ -119,14 +124,27 @@ async function confirmTime(time){
  const day=$('schedule-date').value;if(!day){show('Hãy chọn ngày đăng.');return}
  if(tooSoon(day,time)){show('Giờ đăng phải cách hiện tại ít nhất 5 phút.');return}
  const p=target;if(!p)return;const dialogButtons=[...document.querySelectorAll('#schedule-dialog button')];
- await run(dialogButtons,async()=>{await api('posts/'+p.id,'PUT',{action:'approve',data:{...edits(p),scheduled_at:day+' '+time}});drafts.delete(p.id);$('schedule-dialog').close();filter='ĐÃ DUYỆT';await load();show('Đã hẹn giờ '+fmt(day+' '+time)+'.')});
+ await run(dialogButtons,async()=>{
+  if(rescheduling){await api('posts/'+p.id,'PUT',{action:'reschedule',data:{scheduled_at:day+' '+time}});$('schedule-dialog').close();filter='ĐÃ DUYỆT';await load();show('Đã đổi giờ đăng sang '+fmt(day+' '+time)+'.');return}
+  const c=edits(p),r=await api('posts/'+p.id,'PUT',{action:'approve',data:{...c,scheduled_at:day+' '+time}});drafts.delete(p.id);editing.delete(p.id);$('schedule-dialog').close();filter='ĐÃ DUYỆT';await load();showReport(p,c,r.original);show('Đã hẹn giờ '+fmt(day+' '+time)+'.')});
  }
 $('schedule-date').onchange=drawChips;
 $('schedule-cancel').onclick=()=>$('schedule-dialog').close();
 $('schedule-custom-ok').onclick=()=>{const t=$('schedule-custom').value;if(!t){show('Hãy nhập giờ.');return}confirmTime(t)};
-async function add(platform){await api('posts','POST',{data:{platform,body:''}});filter='NHÁP';await load();show('Đã thêm bài nháp mới.')}
+async function add(platform){const r=await api('posts','POST',{data:{platform,body:''}});if(r.id)editing.add(r.id);filter='NHÁP';await load();show('Đã thêm bài nháp mới.')}
 $('add-facebook').onclick=function(){run([this],()=>add('FACEBOOK'))};
 $('add-threads').onclick=function(){run([this],()=>add('THREADS'))};
 $('logout').onclick=async()=>{if(isDirty()&&!confirm('Có chỉnh sửa chưa lưu. Vẫn đăng xuất?'))return;try{await api('logout','POST');location.href='/admin/'}catch(e){show(e.message)}};
 window.addEventListener('beforeunload',e=>{if(isDirty()){e.preventDefault();e.returnValue=''}});
 try{csrf=(await api('session')).csrf;await load(false)}catch(e){show(e.message)}
+
+function showReport(p,c,before){
+ if(!before)return;
+ const day=nowText.slice(0,10).split('-').reverse().join('/');
+ const lines=['BÁO CÁO SỬA BÀI (để Claude học cách hành văn của Jackson)','Ngày sửa: '+day,'Nền tảng: '+(p.platform==='THREADS'?'Threads':'Facebook')];
+ if(c.source)lines.push('Khách sạn / nguồn: '+c.source);
+ if(c.note)lines.push('Ghi chú của tôi: '+c.note);
+ lines.push('','BẢN GỐC (Claude viết):',before.trim(),'','BẢN ĐÃ SỬA (Jackson):',c.body.trim(),'','Nhờ Claude: so sánh hai bản, rút ra điểm khác trong cách hành văn, ghi nhớ để áp dụng cho các bài sau.');
+ $('report-text').value=lines.join('\n');$('report-dialog').showModal()}
+$('report-close').onclick=()=>$('report-dialog').close();
+$('report-copy').onclick=async()=>{const t=$('report-text');try{await navigator.clipboard.writeText(t.value);show('Đã sao chép báo cáo. Dán vào cuộc trò chuyện với Claude.')}catch{t.select();show('Chưa sao chép tự động được. Nội dung đã được chọn, bấm Ctrl+C.')}};

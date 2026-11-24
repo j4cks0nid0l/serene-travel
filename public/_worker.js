@@ -111,9 +111,18 @@ async function postsApi(req,env,path){
   if(req.method==='DELETE'){if(row.status==='ĐANG ĐĂNG')return json({error:'Bài đang được đăng lên Facebook, chưa xóa được.'},409);if(row.status==='ĐÃ DUYỆT')return json({error:'Hãy bỏ hẹn giờ trước khi xóa bài.'},409);await env.DB.prepare('DELETE FROM posts WHERE id=?').bind(id).run();return json({ok:true})}
   if(req.method!=='PUT')return json({error:'Không hỗ trợ.'},405);
   let input,f;try{input=await req.json();f=cleanPostFields(input?.data||{},true)}catch(e){return json({error:e.message||'Nội dung không hợp lệ.'},400)}
-  const action=input.action||'save';if(!['save','approve','unapprove','posted'].includes(action))return json({error:'Thao tác không hợp lệ.'},400);
+  const action=input.action||'save';if(!['save','approve','unapprove','posted','reschedule'].includes(action))return json({error:'Thao tác không hợp lệ.'},400);
   if(row.status==='ĐÃ ĐĂNG')return json({error:'Bài đã đăng, không sửa được.'},409);
   if(row.status==='ĐANG ĐĂNG'&&action!=='posted')return json({error:'Bài đang được đăng lên Facebook, chờ ít phút rồi tải lại trang.'},409);
+  if(action==='reschedule'){
+   if(row.status!=='ĐÃ DUYỆT')return json({error:'Chỉ đổi giờ được cho bài đang hẹn giờ.'},409);
+   if(f.body!==undefined&&f.body!==row.body||f.image!==undefined&&f.image!==row.image)return json({error:'Bài đã hẹn giờ, không sửa nội dung được.'},409);
+   if(!validPostTime(f.scheduled_at))return json({error:'Hãy chọn giờ đăng.'},400);
+   if(postEpoch(f.scheduled_at)<Date.now()+POST_LEAD_MS)return json({error:'Giờ đăng phải cách hiện tại ít nhất 5 phút.'},400);
+   if(row.scheduled_at&&postEpoch(row.scheduled_at)<Date.now()+POST_LEAD_MS)return json({error:'Bài sắp đến giờ đăng, không đổi giờ được nữa.'},409);
+   const r=await env.DB.prepare("UPDATE posts SET scheduled_at=?,updated=? WHERE id=? AND status='ĐÃ DUYỆT'").bind(f.scheduled_at,new Date().toISOString(),id).run();
+   if(!r.meta||!r.meta.changes)return json({error:'Bài vừa đổi trạng thái, hãy tải lại trang.'},409);
+   return json({ok:true,status:'ĐÃ DUYỆT'})}
   const next={...row,...f},contentChanged=['body','image','scheduled_at','platform'].some(k=>f[k]!==undefined&&f[k]!==row[k]);
   if(row.status==='ĐÃ DUYỆT'&&action!=='unapprove'&&action!=='posted'&&contentChanged)return json({error:'Bài đang hẹn giờ. Hãy bỏ hẹn giờ trước khi sửa.'},409);
   next.kind=next.image?'CÓ ẢNH':'CHỮ THUẦN';let status=row.status,posted=row.posted_at;
@@ -128,7 +137,8 @@ async function postsApi(req,env,path){
   if(f.body!==undefined&&f.body!==row.body)await saveStyleSample(env,row,next.body,'');
   if(action==='approve'||action==='posted')await saveStyleSample(env,row,next.body,'OK nguyên bản');
   await env.DB.prepare('UPDATE posts SET platform=?,kind=?,body=?,image=?,source=?,stt=?,scheduled_at=?,status=?,post_url=?,error=?,note=?,posted_at=?,updated=? WHERE id=?').bind(next.platform,next.kind,next.body,next.image,next.source,next.stt,next.scheduled_at,status,next.post_url,next.error,next.note,posted,new Date().toISOString(),id).run();
-  return json({ok:true,status})
+  const original=row.original_body!=null&&row.original_body.trim()!==String(next.body).trim()?row.original_body:null;
+  return json({ok:true,status,original})
  }catch(e){if(/no such table/i.test(e.message||''))return json({error:'Chưa tạo bảng bài đăng. Chạy file schema-posts.sql trong Console của D1.'},503);throw e}}
 export default {async fetch(req,env){try{return await handle(req,env)}catch(err){console.error('Request failed:',err.message);return json({error:'Chưa xử lý được yêu cầu. Vui lòng thử lại.'},500)}}};
 async function uploadImage(req,env){if(!env.MEDIA)return json({error:'Chưa kết nối kho ảnh.'},503);const type=req.headers.get('content-type')||'',extensions={'image/jpeg':'jpg','image/png':'png','image/webp':'webp'};if(!extensions[type])return json({error:'Chỉ nhận JPG, PNG hoặc WebP.'},400);if(Number(req.headers.get('content-length')||0)>5*1024*1024)return json({error:'Ảnh tối đa 5 MB.'},413);const bytes=await req.arrayBuffer();if(bytes.byteLength>5*1024*1024)return json({error:'Ảnh tối đa 5 MB.'},413);const b=new Uint8Array(bytes);const signature=type==='image/jpeg'?b[0]===255&&b[1]===216&&b[2]===255:type==='image/png'?hex(bytes.slice(0,8))==='89504e470d0a1a0a':String.fromCharCode(...b.slice(0,4))==='RIFF'&&String.fromCharCode(...b.slice(8,12))==='WEBP';if(!signature)return json({error:'Tệp không phải ảnh hợp lệ.'},400);const key=crypto.randomUUID()+'.'+extensions[type];await env.MEDIA.put(key,bytes,{httpMetadata:{contentType:type}});return json({url:'/media/'+key})}
