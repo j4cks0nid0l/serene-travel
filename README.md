@@ -121,3 +121,8 @@ Chưa làm ở giai đoạn này: tự đăng lên Facebook (nối với Make), 
 ### Đăng thẳng đúng giờ (không hẹn giờ trong Business Suite)
 
 Mỗi phút, Cloudflare Worker `workers/clock` gọi `POST /api/machine/tick` (khóa riêng, scope `clock`). Trang web tìm bài "Đã hẹn giờ" đã tới giờ, đổi sang "Đang đăng" rồi gửi bài sang webhook của Make (biến `MAKE_WEBHOOK_URL`). Make đăng thẳng lên Page rồi báo kết quả về `/api/machine/result/{id}`. Bài quá giờ hơn 60 phút, hoặc gửi Make quá 15 phút chưa có kết quả, chuyển sang "Lỗi" và không tự đăng lại để tránh đăng đôi.
+
+## Sửa bài, đổi giờ và báo cáo học văn
+- Bài chờ duyệt hoặc lỗi: ô nội dung khóa sẵn, bấm "Sửa bài" để sửa, rồi "Lưu sửa" hoặc "Hủy sửa".
+- Bài đã hẹn giờ là bài đã duyệt nên không sửa nội dung. Chỉ có nút "Đổi giờ" (giờ mới cách hiện tại ít nhất 5 phút, không đổi được khi bài sắp đến giờ đăng).
+- Khi lưu hoặc hẹn giờ một bài Claude viết mà nội dung đã bị sửa, trang hiện "Báo cáo sửa bài" (bản gốc và bản đã sửa) kèm nút sao chép để dán cho Claude học cách hành văn.

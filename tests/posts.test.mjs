@@ -101,3 +101,39 @@ test('Posts API: clear message when the tables have not been created yet',async(
   const r=await s.call('posts');assert.equal(r.status,503);assert.match((await r.json()).error,/schema-posts\.sql/);
  }finally{env.close()}
 });
+test('Posts API: reschedule changes only the time of a scheduled post',async()=>{
+ const env=await runtime({passwordHash:hash});
+ const s=await session(env),call=s.call;
+ try{
+  await s.login();
+  const id=(await (await call('posts','POST',{from_claude:true,data:{platform:'FACEBOOK',body:'Nội dung duyệt'}})).json()).id;
+  // not scheduled yet
+  assert.equal((await call('posts/'+id,'PUT',{action:'reschedule',data:{scheduled_at:inHours(4)}})).status,409);
+  assert.equal((await call('posts/'+id,'PUT',{action:'approve',data:{scheduled_at:inHours(3)}})).status,200);
+  // content stays locked
+  assert.equal((await call('posts/'+id,'PUT',{action:'reschedule',data:{body:'Sửa lén',scheduled_at:inHours(4)}})).status,409);
+  // invalid / too soon
+  assert.equal((await call('posts/'+id,'PUT',{action:'reschedule',data:{}})).status,400);
+  assert.equal((await call('posts/'+id,'PUT',{action:'reschedule',data:{scheduled_at:inHours(0.05)}})).status,400);
+  // ok
+  const when=inHours(6);
+  assert.equal((await call('posts/'+id,'PUT',{action:'reschedule',data:{scheduled_at:when}})).status,200);
+  const row=(await (await call('posts')).json()).posts.find(p=>p.id===id);
+  assert.equal(row.scheduled_at,when);assert.equal(row.status,'ĐÃ DUYỆT');assert.equal(row.body,'Nội dung duyệt');
+  // about to go out: no more changes
+  await env.DB.prepare('UPDATE posts SET scheduled_at=? WHERE id=?').bind(inHours(0.05),id).run();
+  assert.equal((await call('posts/'+id,'PUT',{action:'reschedule',data:{scheduled_at:inHours(7)}})).status,409);
+ }finally{env.close()}
+});
+test('Posts API: saving an edited Claude draft returns the original for the style report',async()=>{
+ const env=await runtime({passwordHash:hash});
+ const s=await session(env),call=s.call;
+ try{
+  await s.login();
+  const id=(await (await call('posts','POST',{from_claude:true,data:{platform:'FACEBOOK',body:'Bản Claude'}})).json()).id;
+  assert.equal((await (await call('posts/'+id,'PUT',{data:{body:'Bản Claude'}})).json()).original,null);
+  assert.equal((await (await call('posts/'+id,'PUT',{data:{body:'Bản Jackson'}})).json()).original,'Bản Claude');
+  const m=(await (await call('posts','POST',{data:{platform:'FACEBOOK',body:'Tự viết'}})).json()).id;
+  assert.equal((await (await call('posts/'+m,'PUT',{data:{body:'Tự viết lại'}})).json()).original,null);
+ }finally{env.close()}
+});
