@@ -278,6 +278,15 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
 .pay-modal-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:16px}
 .pt-quick{background:#fff;border:.5px dashed rgba(58,125,153,.45);border-radius:9px;padding:10px;margin:-2px 0 10px}
 .pt-quick .field-row{margin-bottom:8px}
+.ob{display:inline-block;font-size:11px;padding:2px 9px;border-radius:20px;margin-bottom:3px}
+.ob-processing{background:#FFF3DC;color:#9A6A12}.ob-success{background:#E3F3EA;color:#2F7A52}.ob-cancelled{background:#FDE7E7;color:#B85C5C}
+.kind-tag{display:inline-block;font-size:10.5px;padding:1px 7px;border-radius:10px;background:#EEF2F5;color:#5B7285;margin-left:6px}.kind-tag.ctv{background:#EDE7F6;color:#5E4B8B}
+.mini-btn{border:.5px solid rgba(58,125,153,.35);background:#fff;color:#2A5F78;border-radius:7px;padding:5px 9px;font-size:12px;font-family:inherit;cursor:pointer}
+.mini-btn.danger{color:#B85C5C;border-color:rgba(184,92,92,.4)}
+.crm-row{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:.5px solid rgba(58,125,153,.15)}
+.crm-row:last-child{border-bottom:0}
+.crm-acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.warn-box{background:#FFF1F1;border:.5px solid rgba(184,92,92,.35);color:#9B4040;border-radius:9px;padding:9px 11px;font-size:12.5px;margin-bottom:10px}
 </style>
 </head>
 <body>
@@ -288,6 +297,9 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
   <nav class="sb-nav">
     <button class="sb-item active" data-tab="new" onclick="go('new')"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Tạo đơn</button>
     <button class="sb-item" data-tab="list" onclick="go('list')"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M5 6h.01M5 12h.01M5 18h.01"/></svg>Danh sách</button>
+    <button class="sb-item" data-tab="leads" onclick="go('leads')"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16l-6 8v6l-4-2v-4L4 5Z"/></svg>Lead</button>
+    <button class="sb-item" data-tab="customers" onclick="go('customers')"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0M16 11a3 3 0 1 0 0-6M17 14a5 5 0 0 1 4 6"/></svg>Khách hàng</button>
+    <button class="sb-item" data-tab="debt" onclick="go('debt')"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 15h3"/></svg>Công nợ</button>
     <button class="sb-item" data-tab="stats" onclick="go('stats')"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="12" width="4" height="8" rx="1"/><rect x="10" y="8" width="4" height="12" rx="1"/><rect x="16" y="4" width="4" height="16" rx="1"/></svg>Thống kê</button>
     <button class="sb-item" data-tab="settings" onclick="toggleSettings()" aria-expanded="false"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h8M18 6h2M4 12h2M12 12h8M4 18h10M20 18h0"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg>Thiết lập<span class="sb-caret"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></button>
     <div class="sb-sub" id="sb-sub">
@@ -324,6 +336,7 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
 <div id="sync-status" style="display:none;text-align:center;font-size:12px;color:#7A8FA0;padding:6px;background:#EBF5F9;border-radius:8px;margin-bottom:.5rem"></div>
 
 <div class="panel active" id="panel-new">
+  <div id="lead-banner" class="warn-box" style="display:none;background:#EAF4F8;border-color:rgba(58,125,153,.35);color:#2A5F78"></div>
   <div id="edit-banner" style="display:none;margin-bottom:.75rem;padding:10px 12px;background:#FFF6E5;border:.5px solid rgba(200,150,60,.4);border-radius:9px;font-size:13px;color:#8A5E10;align-items:center;justify-content:space-between;gap:8px">
     <span id="edit-banner-txt"></span>
     <button class="btn-outline" onclick="cancelEdit()" style="padding:5px 10px;font-size:12px">Hủy sửa</button>
@@ -331,7 +344,7 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
   <div class="card">
     <div class="sec-title"><i class="ti ti-user-circle"></i>Thông tin khách hàng</div>
     <div class="field-row">
-      <div><label>Tên đại diện</label><input id="kh-name" placeholder="Nguyễn Văn A"></div>
+      <div><label>Tên đại diện</label><input id="kh-name" list="cust-list" autocomplete="off" oninput="onCustName()" placeholder="Nguyễn Văn A"><datalist id="cust-list"></datalist><input type="hidden" id="kh-cid"></div>
       <div><label>Số điện thoại</label><input id="kh-phone" placeholder="0901 234 567"></div>
     </div>
     <div class="field-row one">
@@ -339,6 +352,14 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
         <textarea id="kh-guests" placeholder="Nguyễn Văn A&#10;Trần Thị B"></textarea>
       </div>
     </div>
+  </div>
+  <div class="card">
+    <div class="sec-title"><i class="ti ti-gift"></i>Hoa hồng cộng tác viên (nếu có)</div>
+    <div class="field-row">
+      <div><label>Cộng tác viên</label><select id="kh-ctv"><option value="">Không có</option></select></div>
+      <div><label>Hoa hồng (đ)</label><input id="kh-comm" inputmode="numeric" placeholder="0" oninput="this.value=fmtInput(this.value)"></div>
+    </div>
+    <div style="font-size:11px;color:#7A8FA0">Số tiền cố định cho đơn này, nhập mỗi đơn một mức. Chỉ tính là phải trả khi đơn chuyển Thành công. Thêm cộng tác viên ở mục Khách hàng.</div>
   </div>
   <div class="card">
     <div class="sec-title"><i class="ti ti-building"></i>Dịch vụ đặt</div>
@@ -353,13 +374,50 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
 </div>
 
 <div class="panel" id="panel-list">
+  <div class="card" style="padding:10px 12px;margin-bottom:.6rem">
+    <div class="field-row" style="margin-bottom:0">
+      <div><input id="lf-q" placeholder="Tìm mã đơn, tên, SĐT" oninput="renderList()"></div>
+      <div><select id="lf-st" onchange="renderList()"><option value="">Mọi trạng thái đơn</option><option value="processing">Đang xử lý</option><option value="success">Thành công</option><option value="cancelled">Hủy</option></select></div>
+    </div>
+  </div>
   <div id="list-wrap"></div>
   <div id="detail-wrap"></div>
+</div>
+
+<div class="panel" id="panel-leads">
+  <div class="card">
+    <div class="sec-title"><i class="ti ti-filter"></i>Thêm lead</div>
+    <div class="field-row"><div><label>Tên</label><input id="ld-name" maxlength="100" placeholder="Chị Hoa"></div><div><label>Số điện thoại</label><input id="ld-phone" maxlength="30" inputmode="tel" placeholder="0901 234 567"></div></div>
+    <div class="field-row one"><div><label>Nhu cầu</label><textarea id="ld-need" maxlength="500" rows="2" placeholder="VD: Phòng Vinpearl 3 đêm từ 20/12, 2 người lớn 1 trẻ em"></textarea></div></div>
+    <div class="field-row one"><div><label>Nguồn (không bắt buộc)</label><input id="ld-src" maxlength="60" placeholder="VD: TikTok, Facebook, Zalo"></div></div>
+    <button class="btn-main" onclick="leadAdd()"><i class="ti ti-plus"></i>Thêm lead</button>
+  </div>
+  <div class="card"><div class="sec-title"><i class="ti ti-list"></i>Danh sách lead</div><div id="lead-wrap"></div></div>
+</div>
+
+<div class="panel" id="panel-customers">
+  <div class="card">
+    <div class="sec-title"><i class="ti ti-user-plus"></i>Thêm khách hàng / cộng tác viên</div>
+    <div class="field-row"><div><label>Tên</label><input id="cu-name" maxlength="100" placeholder="Nguyễn Văn A"></div><div><label>Số điện thoại</label><input id="cu-phone" maxlength="30" inputmode="tel" placeholder="0901 234 567"></div></div>
+    <div class="field-row"><div><label>Loại</label><select id="cu-kind"><option value="retail">Khách lẻ</option><option value="ctv">Cộng tác viên</option></select></div><div><label>Ghi chú</label><input id="cu-note" maxlength="300" placeholder="Không bắt buộc"></div></div>
+    <button class="btn-main" onclick="custAdd()"><i class="ti ti-plus"></i>Thêm</button>
+  </div>
+  <div class="card">
+    <div class="field-row" style="margin-bottom:8px"><div><input id="cu-q" placeholder="Tìm tên hoặc SĐT" oninput="renderCustomers()"></div><div><select id="cu-filter" onchange="renderCustomers()"><option value="">Tất cả</option><option value="retail">Khách lẻ</option><option value="ctv">Cộng tác viên</option><option value="debt">Đang nợ</option></select></div></div>
+    <div id="cust-wrap"></div>
+  </div>
+</div>
+
+<div class="panel" id="panel-debt">
+  <div class="stat-grid" id="debt-grid"></div>
+  <div class="card"><div class="sec-title"><i class="ti ti-receipt"></i>Khách còn nợ</div><div id="debt-wrap"></div></div>
+  <div class="card" id="debt-extra" style="display:none"></div>
 </div>
 
 <div class="panel" id="panel-stats">
   <div class="stat-grid" id="stat-grid"></div>
   <div class="card" id="stat-cats" style="display:none"></div>
+  <div class="card" id="stat-comm" style="display:none"></div>
   <button class="btn-outline" style="width:100%;margin-bottom:.75rem" onclick="downloadCSV()"><i class="ti ti-file-spreadsheet"></i>Tải bảng đơn hàng (CSV, mở bằng Excel / Google Sheets)</button>
   <div class="card" id="stat-list"></div>
 </div>
@@ -460,6 +518,7 @@ const BANK_BIN = "970422";
 let CSRF = "";
 let loaded = false;
 let bookings = [];
+let customers = [], leads = [], leadFromId = null, crmReady = false;
 let isSyncing = false;
 
 function showSyncStatus(msg, isErr) {
@@ -500,7 +559,7 @@ async function syncFromSheet() {
     renderList();
     if (selId) showDetail(selId);
     auto.forEach(b => saveBooking(b));
-    loadUnits(); loadSettings();
+    loadUnits(); loadSettings(); loadCrm();
   } catch(e) {
     showSyncStatus("⚠️ Không tải được dữ liệu: " + e.message, true);
     console.error(e);
@@ -578,6 +637,9 @@ function switchTab(tab,sub){
   document.querySelectorAll(".set-page").forEach(c=>{ c.style.display=c.dataset.page===curSub?"":"none"; });
   if(tab==="list") renderList();
   if(tab==="stats") renderStats();
+  if(tab==="leads") renderLeads();
+  if(tab==="customers") renderCustomers();
+  if(tab==="debt") renderDebt();
   if(tab==="settings") renderSettings();
 }
 function applySub(){
@@ -1343,6 +1405,8 @@ function readSvcs(){
 }
 function resetForm(){
   $("kh-name").value=""; $("kh-phone").value=""; $("kh-guests").value="";
+  $("kh-cid").value=""; $("kh-comm").value=""; refreshCrmUi(); $("kh-ctv").value="";
+  leadFromId=null; $("lead-banner").style.display="none";
   $("svc-container").innerHTML=""; svcCount=0; addSvc();
 }
 function setEditMode(id){
@@ -1357,6 +1421,9 @@ function editBooking(id){
   resetForm();
   $("svc-container").innerHTML=""; svcCount=0;
   $("kh-name").value=b.name||""; $("kh-phone").value=b.phone||""; $("kh-guests").value=b.guests||"";
+  $("kh-cid").value=b.customerId||"";
+  $("kh-ctv").value=(b.commission&&b.commission.ctvId)||"";
+  $("kh-comm").value=BK.commissionOf(b)?fmtInput(BK.commissionOf(b)):"";
   (b.svcs||[]).forEach(sv=>addSvc(sv));
   if(!(b.svcs||[]).length) addSvc();
   setEditMode(id);
@@ -1379,8 +1446,10 @@ async function createBooking(){
     const b=bookings.find(x=>x.id===editingId);
     if(!b){ toast("Không tìm thấy đơn để sửa"); setEditMode(null); return; }
     b.name=name; b.phone=phone; b.guests=guests; b.svcs=svcs; b.totalAmt=totalAmt; delete b.sent;
+    b.customerId=await resolveCustomer(name,phone); if(!b.customerId) delete b.customerId;
+    applyCommission(b);
     if(b.status!=="completed"){
-      const paid=b.payments.reduce((a,p)=>a+p.amount,0);
+      const paid=BK.paidOf(b);
       b.status=paid>=totalAmt?"done":paid>0?"partial":"pending";
     }
     const id=b.id;
@@ -1390,11 +1459,14 @@ async function createBooking(){
     switchTab("list"); selId=id; renderList(); showDetail(id);
     return;
   }
-  const bk={id:genId(),name,phone,guests,svcs,totalAmt,created:new Date().toLocaleDateString("vi-VN"),payments:[],status:"pending"};
+  const bk={id:genId(),name,phone,guests,svcs,totalAmt,created:new Date().toLocaleDateString("vi-VN"),payments:[],status:"pending",orderStatus:"processing"};
+  const cid=await resolveCustomer(name,phone); if(cid) bk.customerId=cid;
+  applyCommission(bk);
   bookings.push(bk); updateCount();
   const ok=await createRemote(bk);
   if(!ok){ bookings=bookings.filter(x=>x!==bk); updateCount(); toast("Chưa tạo được đơn, dữ liệu trên form vẫn còn"); return; }
   toast("Đã tạo "+bk.id);
+  if(leadFromId){ const ld=leads.find(x=>x.id===leadFromId); if(ld) leadSave(ld,{status:"ordered",booking_id:bk.id}); }
   resetForm();
   switchTab("list"); selId=bk.id; renderList(); showDetail(bk.id);
 }
@@ -1402,12 +1474,15 @@ async function createBooking(){
 function renderList(){
   const w=$("list-wrap");
   if(!bookings.length){ w.innerHTML='<div class="empty"><i class="ti ti-inbox"></i>Chưa có đơn nào</div>'; $("detail-wrap").innerHTML=""; selId=null; return; }
-  w.innerHTML=[...bookings].reverse().map(b=>{
-    const paid=b.payments.reduce((a,p)=>a+p.amount,0), remain=b.totalAmt-paid;
+  const q=($("lf-q")?$("lf-q").value:"").trim().toLowerCase(), fs=$("lf-st")?$("lf-st").value:"";
+  const shown=[...bookings].reverse().filter(b=>(!fs||BK.orderStatusOf(b)===fs)&&(!q||(b.id+" "+b.name+" "+b.phone).toLowerCase().includes(q)));
+  if(!shown.length){ w.innerHTML='<div class="empty"><i class="ti ti-search"></i>Không có đơn phù hợp</div>'; return; }
+  w.innerHTML=shown.map(b=>{
+    const paid=BK.paidOf(b), remain=b.totalAmt-paid, os=BK.orderStatusOf(b);
     const pct=b.totalAmt?Math.min(100,Math.round(paid/b.totalAmt*100)):0;
     const badge=b.status==="completed"?'<span class="badge b-done">Đã hoàn thành</span>':remain<=0?'<span class="badge b-done">Đã TT đủ</span>':paid>0?'<span class="badge b-partial">Đã cọc</span>':'<span class="badge b-wait">Chờ thanh toán</span>';
     return `<div class="bk-item${selId===b.id?" sel":""}" onclick="toggleDetail('${b.id}')">
-      <div class="bk-top"><div><div class="bk-id">${b.id}</div><div class="bk-name">${b.name}</div><div class="bk-phone">${b.phone}</div></div>${badge}</div>
+      <div class="bk-top"><div><div class="bk-id">${b.id}</div><span class="ob ob-${os}">${BK.ORDER_STATUS_LABELS[os]}</span><div class="bk-name">${b.name}</div><div class="bk-phone">${b.phone}</div></div>${badge}</div>
       <div class="prog"><div class="prog-fill" style="width:${pct}%"></div></div>
       <div class="bk-bot"><span class="bk-amt">${VNDn(b.totalAmt)} đ</span><span class="bk-remain">${remain>0?"Còn: "+VNDn(remain)+" đ":"Đã hết"}</span></div>
     </div>`;
@@ -1423,11 +1498,16 @@ let sendTab="", sendFor="";
 function showDetail(id){
   if(sendFor!==id){ sendFor=id; sendTab=""; }
   const b=bookings.find(x=>x.id===id); if(!b) return;
-  const paid=b.payments.reduce((a,p)=>a+p.amount,0), remain=b.totalAmt-paid;
+  const paid=BK.paidOf(b), remain=b.totalAmt-paid;
   const qr=getQr(remain>0?remain:b.totalAmt, b.id);
   const gl=b.guests?b.guests.split("\n").filter(g=>g.trim()).map(g=>"• "+g.trim()).join("\n"):"—";
   const svcRows=b.svcs.map(screenRows).join("");
-  const payHist=b.payments.length?b.payments.map(p=>`<div class="pay-hist-row"><div>${p.date}<span class="pay-tag">${p.type}</span></div><div style="font-weight:600;color:#4A9B6F">${VND(p.amount)}</div></div>`).join(""):'<div class="no-pay">Chưa có thanh toán nào</div>';
+  const payHist=b.payments.length?b.payments.map((p,pi)=>{
+    const pend=!BK.isApproved(p);
+    return `<div class="pay-hist-row"><div>${esc(p.date)}<span class="pay-tag">${esc(p.type)}</span>${p.code?`<span class="pay-tag">${esc(p.code)}</span>`:""}${pend?`<span class="pay-tag" style="background:#FFF3DC;color:#9A6A12">Chờ duyệt</span> <button class="mini-btn" onclick="approvePayment('${id}',${pi})">Duyệt</button>`:""}</div><div style="font-weight:600;color:${pend?"#9A6A12":"#4A9B6F"}">${VND(p.amount)}</div></div>`;
+  }).join(""):'<div class="no-pay">Chưa có thanh toán nào</div>';
+  const os=BK.orderStatusOf(b), cm=BK.commissionOf(b), pendAmt=BK.pendingOf(b);
+  const ctv=customers.find(c=>c.id===(b.commission&&b.commission.ctvId));
   const today=new Date().toISOString().split("T")[0];
 
   $("detail-wrap").innerHTML=`
@@ -1468,6 +1548,26 @@ function showDetail(id){
   </div>
 
   <div class="card">
+    <div class="sec-title"><i class="ti ti-flag"></i>Trạng thái đơn</div>
+    <div style="margin-bottom:8px"><span class="ob ob-${os}" style="font-size:12.5px">${BK.ORDER_STATUS_LABELS[os]}</span></div>
+    ${os==="cancelled"&&paid>0?`<div class="warn-box">Đơn đã hủy nhưng đã nhận ${VND(paid)}. Cần hoàn tiền cho khách hoặc chuyển sang đơn khác.</div>`:""}
+    <div class="crm-acts">
+      ${os!=="success"?`<button class="mini-btn" onclick="setOrderStatus('${id}','success')">Chốt đơn (Thành công)</button>`:""}
+      ${os==="success"?`<button class="mini-btn" onclick="setOrderStatus('${id}','processing')">Chuyển về Đang xử lý</button>`:""}
+      ${os!=="cancelled"?`<button class="mini-btn danger" onclick="setOrderStatus('${id}','cancelled')">Hủy đơn</button>`:`<button class="mini-btn" onclick="setOrderStatus('${id}','processing')">Mở lại đơn</button>`}
+    </div>
+    <div style="font-size:11px;color:#7A8FA0;margin-top:8px">Công nợ khách và hoa hồng chỉ tính khi đơn Thành công.</div>
+  </div>
+
+  ${cm?`<div class="card">
+    <div class="sec-title"><i class="ti ti-gift"></i>Hoa hồng cộng tác viên</div>
+    <div class="phieu-row"><span class="phieu-lbl">Cộng tác viên</span><span class="phieu-val">${ctv?esc(ctv.name):"Chưa chọn"}</span></div>
+    <div class="phieu-row"><span class="phieu-lbl">Số tiền</span><span class="phieu-val">${VND(cm)}</span></div>
+    <div class="phieu-row"><span class="phieu-lbl">Tình trạng</span><span class="phieu-val">${b.commission.paid?"Đã trả"+(b.commission.paidDate?" ngày "+esc(b.commission.paidDate):""):(os==="success"?"Chưa trả":"Chưa tính (đơn chưa Thành công)")}</span></div>
+    ${os==="success"?`<div class="crm-acts"><button class="mini-btn" onclick="toggleCommPaid('${id}')">${b.commission.paid?"Bỏ đánh dấu đã trả":"Đánh dấu đã trả"}</button></div>`:""}
+  </div>`:""}
+
+  <div class="card">
     <div class="sec-title"><i class="ti ti-credit-card"></i>Xác nhận thanh toán</div>
     ${(b.status!=="completed"||remain>0)?`
     <div class="pay-confirm-section">
@@ -1477,6 +1577,10 @@ function showDetail(id){
         <input id="custom-coc-${id}" inputmode="numeric" placeholder="0" oninput="this.value=fmtInput(this.value)" style="padding:8px 10px;font-size:13px;font-family:inherit;border:.5px solid rgba(58,125,153,.25);border-radius:8px;background:#fff;color:#2C3E50;width:100%"></div>
         <button class="btn-pay" style="margin-top:0;white-space:nowrap" onclick="askPay('${id}','custom')">Xác nhận cọc</button>
       </div>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;margin-bottom:8px">
+        <input id="pay-code-${id}" maxlength="30" placeholder="Mã phiếu thu (để trống sẽ tự tạo)" style="padding:8px 10px;font-size:13px;font-family:inherit;border:.5px solid rgba(58,125,153,.25);border-radius:8px;background:#fff;color:#2C3E50;width:100%">
+        <label style="font-size:12px;color:#5B7285;white-space:nowrap"><input type="checkbox" id="pay-pend-${id}"> Chờ duyệt</label>
+      </div>
       ${paid>0
         ?`<button class="pay-confirm-btn btn-confirm-full" onclick="askPay('${id}','remaining')" style="background:#5BA4A4">💳 Đã nhận nốt<br><small style="font-weight:500">${VND(remain)}</small></button>`
         :`<button class="pay-confirm-btn btn-confirm-full" onclick="askPay('${id}','full')">✅ Đã nhận đủ 100%<br><small style="font-weight:500">${VND(b.totalAmt)}</small></button>`}
@@ -1484,7 +1588,7 @@ function showDetail(id){
     ${payHist.length?'<div style="margin-top:10px">'+payHist+'</div>':""}
     <div class="pay-cards" style="margin-top:10px">
       <div class="pay-card"><div class="pay-card-lbl">Đã nhận</div><div class="pay-card-val" style="color:#4A9B6F">${VND(paid)}</div></div>
-      <div class="pay-card"><div class="pay-card-lbl">Còn lại</div><div class="pay-card-val" style="color:${remain>0?"#C8963C":"#4A9B6F"}">${remain>0?VND(remain):"Đã đủ"}</div></div>
+      ${pendAmt>0?`<div class="pay-card"><div class="pay-card-lbl">Chờ duyệt</div><div class="pay-card-val" style="color:#9A6A12">${VND(pendAmt)}</div></div>`:""}<div class="pay-card"><div class="pay-card-lbl">Còn lại</div><div class="pay-card-val" style="color:${remain>0?"#C8963C":"#4A9B6F"}">${remain>0?VND(remain):"Đã đủ"}</div></div>
     </div>
     ${b.status!=="completed"&&remain<=0?`<button class="pay-confirm-btn btn-confirm-complete" style="margin-top:10px" onclick="markComplete('${id}')">✈️ Đánh dấu hoàn thành</button>`:""}
   </div>
@@ -1508,7 +1612,7 @@ function showDetail(id){
 
 // Tính số tiền và nhãn cho từng nút ghi nhận tiền
 function payInfo(b,type,id){
-  const paid=b.payments.reduce((a,p)=>a+p.amount,0), remain=b.totalAmt-paid;
+  const paid=BK.paidOf(b), remain=b.totalAmt-paid;
   if(type==="coc50") return {amt:Math.round(b.totalAmt*0.5), label:"Cọc 50%", ask:"nhận cọc 50%"};
   if(type==="full") return {amt:b.totalAmt-paid, label:"Thanh toán full", ask:"nhận đủ 100%"};
   if(type==="remaining") return {amt:remain, label:"Thanh toán nốt", ask:"nhận nốt"};
@@ -1532,8 +1636,8 @@ function askPay(id,type){
   const b=bookings.find(x=>x.id===id); if(!b) return;
   const info=payInfo(b,type,id);
   if(!info.amt){ toast(type==="custom"?"Nhập số tiền!":"Số tiền không hợp lệ!"); return; }
-  const paid=b.payments.reduce((a,p)=>a+p.amount,0);
-  if(paid+info.amt>b.totalAmt){ toast("Số tiền vượt quá tổng đơn ("+VND(b.totalAmt)+"). Kiểm tra lại.",4500); return; }
+  const paid=BK.paidOf(b);
+  if(paid+BK.pendingOf(b)+info.amt>b.totalAmt){ toast("Số tiền vượt quá tổng đơn ("+VND(b.totalAmt)+"), tính cả phiếu chờ duyệt. Kiểm tra lại.",4500); return; }
   askConfirm(`Xác nhận đã <b>${info.ask}</b> <b>${VND(info.amt)}</b> cho đơn <b>${esc(id)}</b>?<div class="pay-modal-sub">Sau khi xác nhận: đã nhận ${VND(paid+info.amt)} / tổng ${VND(b.totalAmt)}${paid+info.amt>=b.totalAmt?" (đã đủ)":", còn "+VND(b.totalAmt-paid-info.amt)}.</div>`,()=>confirmPayment(id,type));
 }
 function confirmPayment(id, type) {
@@ -1541,13 +1645,45 @@ function confirmPayment(id, type) {
   const today=new Date().toLocaleDateString("vi-VN");
   const {amt,label}=payInfo(b,type,id);
   if(!amt){ toast("Số tiền không hợp lệ!"); return; }
-  const before=b.payments.reduce((a,p)=>a+p.amount,0);
-  if(before+amt>b.totalAmt){ toast("Số tiền vượt quá tổng đơn. Kiểm tra lại.",4500); return; }
-  b.payments.push({amount:amt,type:label,date:today});
-  const totalPaid=b.payments.reduce((a,p)=>a+p.amount,0);
+  const before=BK.paidOf(b);
+  if(before+BK.pendingOf(b)+amt>b.totalAmt){ toast("Số tiền vượt quá tổng đơn. Kiểm tra lại.",4500); return; }
+  const pend=!!($("pay-pend-"+id)&&$("pay-pend-"+id).checked);
+  let code=($("pay-code-"+id)?$("pay-code-"+id).value:"").trim().replace(/[<>"&]/g,"").slice(0,30);
+  if(!code) code=nextReceiptCode();
+  b.payments.push({amount:amt,type:label,date:today,code,status:pend?"pending":"approved"});
+  const totalPaid=BK.paidOf(b);
   if(b.status!=="completed") b.status=totalPaid>=b.totalAmt?"done":totalPaid>0?"partial":"pending";
   saveBooking(b); toast("✅ Đã xác nhận nhận "+VND(amt));
   renderList(); showDetail(id);
+}
+
+// Mã phiếu thu: PT + ngày (yymmdd) + số thứ tự trong ngày
+function nextReceiptCode(){
+  const n=new Date(), pre="PT"+String(n.getFullYear()).slice(2)+String(n.getMonth()+1).padStart(2,"0")+String(n.getDate()).padStart(2,"0");
+  let max=0;
+  bookings.forEach(b=>(b.payments||[]).forEach(p=>{ if(p.code&&p.code.startsWith(pre)){ const k=parseInt(p.code.slice(pre.length))||0; if(k>max) max=k; } }));
+  return pre+String(max+1).padStart(2,"0");
+}
+function approvePayment(id,pi){
+  const b=bookings.find(x=>x.id===id); if(!b||!b.payments[pi]) return;
+  b.payments[pi].status="approved";
+  const tp=BK.paidOf(b);
+  if(b.status!=="completed") b.status=tp>=b.totalAmt?"done":tp>0?"partial":"pending";
+  saveBooking(b); toast("Đã duyệt phiếu thu"); renderList(); showDetail(id);
+}
+function setOrderStatus(id,st){
+  const b=bookings.find(x=>x.id===id); if(!b) return;
+  const apply=()=>{ b.orderStatus=st; saveBooking(b); toast("Đơn "+id+": "+BK.ORDER_STATUS_LABELS[st]); renderList(); showDetail(id); };
+  if(st==="cancelled"){
+    const paid=BK.paidOf(b);
+    askConfirm(`Hủy đơn <b>${esc(id)}</b>?${paid>0?`<div class="pay-modal-sub">Đơn đã nhận ${VND(paid)}. Sau khi hủy, số này nằm ở mục cần hoàn tiền trong tab Công nợ.</div>`:""}`,apply);
+  } else apply();
+}
+function toggleCommPaid(id){
+  const b=bookings.find(x=>x.id===id); if(!b||!b.commission) return;
+  if(b.commission.paid){ b.commission.paid=false; delete b.commission.paidDate; }
+  else { b.commission.paid=true; b.commission.paidDate=new Date().toLocaleDateString("vi-VN"); }
+  saveBooking(b); toast("Đã cập nhật hoa hồng"); showDetail(id);
 }
 
 function markComplete(id) {
@@ -1629,7 +1765,7 @@ function addToCalendar(id) {
 }
 
 function getRemainText(b) {
-  const paid=b.payments.reduce((a,p)=>a+p.amount,0), remain=b.totalAmt-paid;
+  const paid=BK.paidOf(b), remain=b.totalAmt-paid;
   if(remain<=0) return "";
   const opt=b.payOpt||"";
   if(opt==="coc50") return `\n⏳ Số còn lại ${VND(remain)} thanh toán nốt sau khi có mã số đặt phòng`;
@@ -1729,7 +1865,7 @@ function copyToClipboard(txt, okMsg){
 }
 
 function custMsgText(b){
-  const paid=b.payments.reduce((a,p)=>a+p.amount,0);
+  const paid=BK.paidOf(b);
   const gl=b.guests&&b.guests.trim()?"\nDanh sách khách:\n"+guestBullets(b).join("\n"):"";
   const blocks=b.svcs.map(s=>{
     let t=s.name;
@@ -1760,7 +1896,7 @@ async function fetchQrDataUrl(amount, info){
   return new Promise((ok,fail)=>{ const fr=new FileReader(); fr.onload=()=>ok(fr.result); fr.onerror=fail; fr.readAsDataURL(blob); });
 }
 function slipHtml(b, qrSrc){
-  const paid=b.payments.reduce((a,p)=>a+p.amount,0), remain=b.totalAmt-paid;
+  const paid=BK.paidOf(b), remain=b.totalAmt-paid;
   const guests=b.guests?b.guests.split("\n").map(g=>g.trim()).filter(Boolean):[];
   const rows=b.svcs.map(slipRows).join("");
   return `
@@ -1799,7 +1935,7 @@ function waitImages(root){
 async function makeSlip(id){
   const b=bookings.find(x=>x.id===id); if(!b) throw new Error("Không thấy đơn");
   if(typeof html2canvas!=="function") throw new Error("Thiếu thư viện chụp ảnh");
-  const paid=b.payments.reduce((a,p)=>a+p.amount,0), remain=b.totalAmt-paid;
+  const paid=BK.paidOf(b), remain=b.totalAmt-paid;
   let qr="";
   try{ qr=await fetchQrDataUrl(remain>0?remain:b.totalAmt, b.id); }
   catch(e){ console.error(e); toast("Không tải được mã QR, ảnh sẽ không có QR"); }
@@ -1951,7 +2087,7 @@ function autoComplete(){
   const today=new Date(); today.setHours(0,0,0,0);
   const changed=[];
   bookings.forEach(b=>{
-    if(b.status==="completed") return;
+    if(b.status==="completed"||BK.orderStatusOf(b)==="cancelled") return;
     let last=null;
     (b.svcs||[]).forEach(s=>{
       const t=parseDate6(s.dateOut||s.dateIn||"");
@@ -2005,23 +2141,34 @@ function renderCatStats(){
       <div style="text-align:right"><div style="font-family:Georgia,serif;font-size:16px;font-weight:700">${VNDn(r.revenue)} đ</div>${prof}</div></div>`;
   }).join("")+'<div style="font-size:11px;color:#7A8FA0;margin-top:8px">Lãi theo loại chỉ tính các dịch vụ đã nhập đủ giá net. Đơn cũ tính vào loại Xe.</div>';
 }
+function renderCommStats(cs){
+  const el=$("stat-comm"); if(!el) return;
+  if(!cs.rows.length){ el.style.display="none"; return; }
+  el.style.display="";
+  el.innerHTML='<div class="sec-title"><i class="ti ti-gift"></i>Hoa hồng cộng tác viên</div>'
+   +`<div style="font-size:12.5px;margin-bottom:8px">Tổng ${VND(cs.total)} · Đã trả ${VND(cs.paid)} · <b style="color:#C8963C">Chưa trả ${VND(cs.unpaid)}</b></div>`
+   +cs.rows.map(r=>`<div class="stat-item"><div><div style="font-size:14px;font-weight:500">${esc(r.name)}</div><div style="font-size:11.5px;color:#7A8FA0">${r.count} đơn Thành công</div></div><div style="text-align:right"><div style="font-size:14px;font-weight:700">${VNDn(r.total)} đ</div><div style="font-size:11.5px;color:${r.unpaid>0?"#C8963C":"#4A9B6F"}">${r.unpaid>0?"Chưa trả "+VNDn(r.unpaid)+" đ":"Đã trả hết"}</div></div></div>`).join("");
+}
 function renderStats(){
   renderCatStats();
-  const rev=bookings.reduce((a,b)=>a+b.totalAmt,0);
-  const paid=bookings.reduce((a,b)=>a+b.payments.reduce((x,p)=>x+p.amount,0),0);
-  const totalNet=bookings.reduce((a,b)=>a+b.svcs.reduce((x,s)=>x+(s.totalNet||0),0),0);
-  const hasNet=bookings.some(b=>b.svcs.some(s=>s.totalNet));
-  const profit=rev-totalNet;
+  const live=bookings.filter(b=>BK.orderStatusOf(b)!=="cancelled");
+  const rev=live.reduce((a,b)=>a+b.totalAmt,0);
+  const paid=live.reduce((a,b)=>a+BK.paidOf(b),0);
+  const totalNet=live.reduce((a,b)=>a+b.svcs.reduce((x,s)=>x+(s.totalNet||0),0),0);
+  const hasNet=live.some(b=>b.svcs.some(s=>s.totalNet));
+  const cs=BK.commissionStats(bookings,customers);
+  const profit=rev-totalNet-cs.total;
   $("stat-grid").innerHTML=`
-    <div class="stat-card"><div class="stat-val" style="font-size:22px;color:#2A5F78">${bookings.length}</div><div class="stat-lbl">Tổng đơn</div></div>
+    <div class="stat-card"><div class="stat-val" style="font-size:22px;color:#2A5F78">${live.length}</div><div class="stat-lbl">Đơn (không tính hủy)</div></div>
     <div class="stat-card"><div class="stat-val" style="font-size:13px;color:#2A5F78">${VNDn(rev)} đ</div><div class="stat-lbl">Doanh thu</div></div>
     <div class="stat-card"><div class="stat-val" style="font-size:13px;color:#C8963C">${VNDn(rev-paid)} đ</div><div class="stat-lbl">Chưa thu</div></div>
     <div class="stat-card"><div class="stat-val" style="font-size:13px;color:#4A9B6F">${VNDn(paid)} đ</div><div class="stat-lbl">Đã thu</div></div>
-    <div class="stat-card" style="grid-column:span 2"><div class="stat-val" style="font-size:13px;color:${profit>=0?"#2E7D32":"#B85C5C"}">${hasNet?(VNDn(profit)+" đ"):"Chưa đủ giá net"}</div><div class="stat-lbl">Lợi nhuận ước tính</div></div>`;
+    <div class="stat-card" style="grid-column:span 2"><div class="stat-val" style="font-size:13px;color:${profit>=0?"#2E7D32":"#B85C5C"}">${hasNet?(VNDn(profit)+" đ"):"Chưa đủ giá net"}</div><div class="stat-lbl">Lợi nhuận = bán - net - hoa hồng</div></div>`;
+  renderCommStats(cs);
   const sl=$("stat-list");
   if(!bookings.length){ sl.innerHTML='<div class="empty"><i class="ti ti-chart-bar"></i>Chưa có dữ liệu</div>'; return; }
   sl.innerHTML=[...bookings].reverse().map(b=>{
-    const p2=b.payments.reduce((a,p)=>a+p.amount,0), r2=b.totalAmt-p2;
+    const p2=BK.paidOf(b), r2=b.totalAmt-p2;
     const pct=b.totalAmt?Math.min(100,Math.round(p2/b.totalAmt*100)):0;
     return `<div class="stat-item">
       <div><div style="font-size:11px;font-weight:600;color:#5BA4A4;letter-spacing:1px">${b.id}</div>
@@ -2031,6 +2178,148 @@ function renderStats(){
       <div style="font-size:11.5px;color:${r2>0?"#C8963C":"#4A9B6F"}">${r2>0?"Còn "+VNDn(r2)+" đ":"Đã đủ"}</div></div>
     </div>`;
   }).join("");
+}
+
+// ── Khách hàng, cộng tác viên, lead ──
+async function loadCrm(){
+  try{
+    const c=await apiBooking("GET",undefined,"/api/customers");
+    const l=await apiBooking("GET",undefined,"/api/leads");
+    customers=c.customers||[]; leads=l.leads||[]; crmReady=true;
+  }catch(e){
+    crmReady=false;
+    showSyncStatus("ℹ️ Chưa tải được khách hàng và lead: "+e.message,true);
+  }
+  refreshCrmUi();
+  if(curTab==="customers") renderCustomers();
+  if(curTab==="leads") renderLeads();
+  if(curTab==="debt") renderDebt();
+}
+function refreshCrmUi(){
+  const dl=$("cust-list");
+  if(dl) dl.innerHTML=customers.filter(c=>c.kind!=="ctv").map(c=>`<option value="${escAttr(c.name)}">${esc(c.phone||"")}</option>`).join("");
+  const sel=$("kh-ctv");
+  if(sel){
+    const cur=sel.value;
+    sel.innerHTML='<option value="">Không có</option>'+customers.filter(c=>c.kind==="ctv").map(c=>`<option value="${escAttr(c.id)}">${esc(c.name)}</option>`).join("");
+    sel.value=cur;
+  }
+}
+function onCustName(){
+  const v=$("kh-name").value.trim().toLowerCase();
+  const c=customers.find(x=>x.kind!=="ctv"&&x.name.toLowerCase()===v);
+  if(c){ $("kh-cid").value=c.id; if(c.phone) $("kh-phone").value=c.phone; } else $("kh-cid").value="";
+}
+// Tìm khách theo mã đang chọn hoặc số điện thoại, chưa có thì tạo mới (lỗi thì bỏ qua, đơn vẫn tạo được)
+async function resolveCustomer(name,phone){
+  if(!crmReady) return "";
+  const cid=$("kh-cid").value;
+  if(cid&&customers.some(c=>c.id===cid)) return cid;
+  const key=String(phone).replace(/\D/g,"");
+  const found=key&&customers.find(c=>String(c.phone||"").replace(/\D/g,"")===key&&c.kind!=="ctv");
+  if(found) return found.id;
+  try{
+    const r=await apiBooking("POST",{name,phone,kind:"retail",note:""},"/api/customers");
+    customers.push(r.customer); refreshCrmUi(); return r.customer.id;
+  }catch(e){ console.error(e); return ""; }
+}
+function applyCommission(b){
+  const amt=parseNum($("kh-comm").value), ctvId=$("kh-ctv").value;
+  if(amt>0){
+    const old=b.commission||{};
+    b.commission={ctvId,amount:amt,paid:!!old.paid};
+    if(old.paid&&old.paidDate) b.commission.paidDate=old.paidDate;
+  } else delete b.commission;
+}
+async function custAdd(){
+  const name=$("cu-name").value.trim(), phone=$("cu-phone").value.trim();
+  if(!name){ toast("Nhập tên!"); return; }
+  try{
+    const r=await apiBooking("POST",{name,phone,kind:$("cu-kind").value,note:$("cu-note").value.trim()},"/api/customers");
+    customers.push(r.customer); refreshCrmUi();
+    ["cu-name","cu-phone","cu-note"].forEach(i=>$(i).value="");
+    toast("Đã thêm "+name); renderCustomers();
+  }catch(e){ toast(e.message,4500); }
+}
+function custDel(id){
+  const c=customers.find(x=>x.id===id); if(!c) return;
+  askConfirm(`Xóa <b>${esc(c.name)}</b>?<div class="pay-modal-sub">Chỉ xóa được khi chưa có đơn hoặc hoa hồng nào gắn với người này.</div>`,async()=>{
+    try{ await apiBooking("DELETE",undefined,"/api/customers/"+id); customers=customers.filter(x=>x.id!==id); refreshCrmUi(); renderCustomers(); toast("Đã xóa"); }
+    catch(e){ toast(e.message,4500); }
+  });
+}
+function custOrder(id){
+  const c=customers.find(x=>x.id===id); if(!c) return;
+  cancelEdit(); $("kh-name").value=c.name; $("kh-phone").value=c.phone||""; $("kh-cid").value=c.id;
+  switchTab("new"); window.scrollTo({top:0,behavior:"smooth"});
+}
+function custOrders(id){
+  const rows=BK.customerLedger(bookings,customers).find(r=>r.id===id);
+  if(!rows||!rows.orders.length){ toast("Chưa có đơn nào"); return; }
+  $("lf-q").value=rows.orders[rows.orders.length-1]; $("lf-st").value=""; switchTab("list");
+}
+function renderCustomers(){
+  const w=$("cust-wrap"); if(!w) return;
+  if(!crmReady){ w.innerHTML='<div class="empty"><i class="ti ti-plug-off"></i>Chưa tải được danh sách. Nếu bạn chưa tạo bảng khách hàng và lead trong D1 thì làm theo hướng dẫn rồi bấm làm mới.</div>'; return; }
+  const q=$("cu-q").value.trim().toLowerCase(), f=$("cu-filter").value;
+  const led=BK.customerLedger(bookings,customers).filter(r=>(!f||(f==="debt"?r.debt>0:r.kind===f))&&(!q||(r.name+" "+r.phone).toLowerCase().includes(q)));
+  if(!led.length){ w.innerHTML='<div class="empty"><i class="ti ti-users"></i>Chưa có khách nào</div>'; return; }
+  w.innerHTML=led.map(r=>`<div class="crm-row"><div style="min-width:0"><div style="font-size:14px;font-weight:500">${esc(r.name)}<span class="kind-tag${r.kind==="ctv"?" ctv":""}">${r.kind==="ctv"?"CTV":"Khách lẻ"}</span></div>
+    <div style="font-size:12px;color:#7A8FA0">${esc(r.phone||"Chưa có SĐT")}${r.note?" · "+esc(r.note):""}</div>
+    <div class="crm-acts">${r.kind!=="ctv"?`<button class="mini-btn" onclick="custOrder('${r.id}')">Tạo đơn</button>`:""}<button class="mini-btn" onclick="custOrders('${r.id}')">Xem đơn</button><button class="mini-btn danger" onclick="custDel('${r.id}')">Xóa</button></div></div>
+    <div style="text-align:right;font-size:12px;white-space:nowrap">${r.kind!=="ctv"?`<div>${r.count} đơn</div><div style="font-weight:600">${VNDn(r.revenue)} đ</div>${r.debt>0?`<div style="color:#C8963C">Nợ ${VNDn(r.debt)} đ</div>`:""}`:`<div>${(BK.commissionStats(bookings,customers).rows.find(x=>x.id===r.id)||{count:0}).count} đơn</div>`}</div></div>`).join("");
+}
+function renderDebt(){
+  const led=BK.customerLedger(bookings,customers).filter(r=>r.kind!=="ctv");
+  const debt=led.reduce((a,r)=>a+Math.max(r.debt,0),0), pre=led.reduce((a,r)=>a+r.prepaid,0), ref=led.reduce((a,r)=>a+r.refundDue,0);
+  // Đơn chưa gắn khách nào vẫn phải tính vào nợ để không sót
+  const noCust=bookings.filter(b=>!BK.bookingCustomerId(b,customers)&&BK.orderStatusOf(b)==="success").reduce((a,b)=>a+(b.totalAmt-BK.paidOf(b)),0);
+  $("debt-grid").innerHTML=`
+    <div class="stat-card"><div class="stat-val" style="font-size:13px;color:#C8963C">${VNDn(debt+noCust)} đ</div><div class="stat-lbl">Khách còn nợ (đơn Thành công)</div></div>
+    <div class="stat-card"><div class="stat-val" style="font-size:13px;color:#2A5F78">${VNDn(pre)} đ</div><div class="stat-lbl">Đã nhận trước (đơn đang xử lý)</div></div>
+    <div class="stat-card" style="grid-column:span 2"><div class="stat-val" style="font-size:13px;color:#B85C5C">${VNDn(ref)} đ</div><div class="stat-lbl">Cần hoàn cho khách (đơn đã hủy)</div></div>`;
+  const rows=bookings.filter(b=>BK.orderStatusOf(b)==="success"&&b.totalAmt-BK.paidOf(b)>0);
+  $("debt-wrap").innerHTML=rows.length?rows.map(b=>`<div class="crm-row" style="cursor:pointer" onclick="selId='${b.id}';switchTab('list');showDetail('${b.id}')"><div><div style="font-size:11px;font-weight:600;color:#5BA4A4">${b.id}</div><div style="font-size:14px">${esc(b.name)}</div><div style="font-size:12px;color:#7A8FA0">${esc(b.phone)}</div></div><div style="text-align:right"><div style="font-weight:700;color:#C8963C">${VNDn(b.totalAmt-BK.paidOf(b))} đ</div><div style="font-size:11.5px;color:#7A8FA0">/ ${VNDn(b.totalAmt)} đ</div></div></div>`).join(""):'<div class="empty"><i class="ti ti-circle-check"></i>Không có khách nào còn nợ</div>';
+  const rf=bookings.filter(b=>BK.orderStatusOf(b)==="cancelled"&&BK.paidOf(b)>0), ex=$("debt-extra");
+  if(!rf.length){ ex.style.display="none"; return; }
+  ex.style.display="";
+  ex.innerHTML='<div class="sec-title"><i class="ti ti-arrow-back-up"></i>Đơn hủy cần hoàn tiền</div>'+rf.map(b=>`<div class="crm-row"><div><div style="font-size:11px;font-weight:600;color:#B85C5C">${b.id}</div><div style="font-size:14px">${esc(b.name)}</div></div><div style="font-weight:700;color:#B85C5C">${VNDn(BK.paidOf(b))} đ</div></div>`).join("");
+}
+const LEAD_LBL={new:"Mới",contacted:"Đã liên hệ",ordered:"Đã lên đơn",lost:"Mất"};
+async function leadAdd(){
+  const name=$("ld-name").value.trim();
+  if(!name){ toast("Nhập tên lead!"); return; }
+  try{
+    const r=await apiBooking("POST",{name,phone:$("ld-phone").value.trim(),need:$("ld-need").value.trim(),source:$("ld-src").value.trim()},"/api/leads");
+    leads.push(r.lead); ["ld-name","ld-phone","ld-need","ld-src"].forEach(i=>$(i).value=""); toast("Đã thêm lead"); renderLeads();
+  }catch(e){ toast(e.message,4500); }
+}
+async function leadSave(ld,patch){
+  const next=Object.assign({},ld,patch);
+  try{ const r=await apiBooking("PUT",{name:next.name,phone:next.phone,need:next.need,source:next.source,status:next.status,booking_id:next.booking_id||""},"/api/leads/"+ld.id); Object.assign(ld,r.lead); }
+  catch(e){ toast(e.message,4500); }
+  renderLeads();
+}
+function leadSet(id,st){ const ld=leads.find(x=>x.id===id); if(ld) leadSave(ld,{status:st}); }
+function leadDel(id){
+  askConfirm("Xóa lead này?",async()=>{ try{ await apiBooking("DELETE",undefined,"/api/leads/"+id); leads=leads.filter(x=>x.id!==id); renderLeads(); toast("Đã xóa lead"); }catch(e){ toast(e.message,4500); } });
+}
+function leadToOrder(id){
+  const ld=leads.find(x=>x.id===id); if(!ld) return;
+  cancelEdit(); $("kh-name").value=ld.name; $("kh-phone").value=ld.phone||""; onCustName();
+  leadFromId=id; const bn=$("lead-banner"); bn.style.display="block"; bn.textContent="Tạo đơn từ lead: "+ld.name+(ld.need?" - "+ld.need:"");
+  switchTab("new"); window.scrollTo({top:0,behavior:"smooth"});
+}
+function renderLeads(){
+  const w=$("lead-wrap"); if(!w) return;
+  if(!crmReady){ w.innerHTML='<div class="empty"><i class="ti ti-plug-off"></i>Chưa tải được lead. Kiểm tra bảng leads trong D1.</div>'; return; }
+  const list=[...leads].reverse();
+  if(!list.length){ w.innerHTML='<div class="empty"><i class="ti ti-filter"></i>Chưa có lead nào</div>'; return; }
+  w.innerHTML=list.map(l=>`<div class="crm-row"><div style="min-width:0"><div style="font-size:14px;font-weight:500">${esc(l.name)}<span class="kind-tag">${LEAD_LBL[l.status]||l.status}</span></div>
+    <div style="font-size:12px;color:#7A8FA0">${esc(l.phone||"Chưa có SĐT")}${l.source?" · "+esc(l.source):""}</div>
+    ${l.need?`<div style="font-size:12.5px;margin-top:3px">${esc(l.need)}</div>`:""}
+    ${l.booking_id?`<div style="font-size:11.5px;color:#5BA4A4;margin-top:3px">Đơn ${esc(l.booking_id)}</div>`:""}
+    <div class="crm-acts">${l.status!=="ordered"?`<button class="mini-btn" onclick="leadToOrder('${l.id}')">Tạo đơn</button>`:""}${l.status==="new"?`<button class="mini-btn" onclick="leadSet('${l.id}','contacted')">Đã liên hệ</button>`:""}${l.status!=="lost"&&l.status!=="ordered"?`<button class="mini-btn" onclick="leadSet('${l.id}','lost')">Mất</button>`:""}${l.status==="lost"?`<button class="mini-btn" onclick="leadSet('${l.id}','new')">Mở lại</button>`:""}<button class="mini-btn danger" onclick="leadDel('${l.id}')">Xóa</button></div></div></div>`).join("");
 }
 
 // Init
