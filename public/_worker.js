@@ -73,7 +73,75 @@ function cleanUnitHide(v){
  }
  return out
 }
-function validateBooking(b,expected){if(!b||typeof b!=='object'||Array.isArray(b))throw Error('Dữ liệu đơn hàng không hợp lệ.');if(typeof b.id!=='string'||!/^ST[0-9]{1,12}$/.test(b.id)||(expected&&b.id!==expected))throw Error('Mã đơn không hợp lệ.');if(typeof b.name!=='string'||b.name.length>200||typeof b.phone!=='string'||b.phone.length>60)throw Error('Tên hoặc số điện thoại không hợp lệ.');if(!Array.isArray(b.svcs)||b.svcs.length>60||!b.svcs.every(x=>x&&typeof x==='object'&&!Array.isArray(x)))throw Error('Danh sách dịch vụ không hợp lệ.');if(!Array.isArray(b.payments)||b.payments.length>200||!b.payments.every(x=>x&&typeof x==='object'&&Number.isFinite(x.amount)))throw Error('Danh sách thanh toán không hợp lệ.');if(!Number.isFinite(b.totalAmt)||b.totalAmt<0)throw Error('Tổng tiền không hợp lệ.');if(JSON.stringify(b).length>150000)throw Error('Dữ liệu đơn quá lớn.');return b}
+// Trường quản lý khách và hoa hồng của đơn (đều không bắt buộc, đơn cũ không có vẫn hợp lệ)
+const BOOKING_ORDER_STATUSES=['processing','success','cancelled'],CUSTOMER_ID_RE=/^c[a-z0-9]{3,24}$/;
+function validateCrmFields(b){
+ if(b.orderStatus!==undefined&&!BOOKING_ORDER_STATUSES.includes(b.orderStatus))throw Error('Trạng thái đơn không hợp lệ.');
+ if(b.customerId!==undefined&&b.customerId!==''&&!(typeof b.customerId==='string'&&CUSTOMER_ID_RE.test(b.customerId)))throw Error('Mã khách hàng không hợp lệ.');
+ for(const k of ['createdBy','updatedBy','owner'])if(b[k]!==undefined&&!(typeof b[k]==='string'&&b[k].length<=80&&!/[<>]/.test(b[k])))throw Error('Thông tin người tạo không hợp lệ.');
+ for(const p of b.payments){
+  if(p.status!==undefined&&!['approved','pending'].includes(p.status))throw Error('Trạng thái phiếu thu không hợp lệ.');
+  if(p.code!==undefined&&!(typeof p.code==='string'&&p.code.length<=30&&!/[<>"&]/.test(p.code)))throw Error('Mã phiếu thu không hợp lệ.');
+ }
+ const c=b.commission;
+ if(c!==undefined&&c!==null){
+  if(typeof c!=='object'||Array.isArray(c))throw Error('Hoa hồng không hợp lệ.');
+  if(!Number.isFinite(c.amount)||c.amount<0||c.amount>10000000000)throw Error('Số tiền hoa hồng không hợp lệ.');
+  if(c.ctvId!==undefined&&c.ctvId!==''&&!(typeof c.ctvId==='string'&&CUSTOMER_ID_RE.test(c.ctvId)))throw Error('Cộng tác viên không hợp lệ.');
+  if(c.paid!==undefined&&typeof c.paid!=='boolean')throw Error('Trạng thái trả hoa hồng không hợp lệ.');
+  for(const k of ['paidDate','note'])if(c[k]!==undefined&&!(typeof c[k]==='string'&&c[k].length<=(k==='note'?200:20)&&!/[<>]/.test(c[k])))throw Error('Thông tin hoa hồng không hợp lệ.');
+ }
+}
+// Khách hàng và lead: bảng riêng trong kho đơn hàng (BOOKINGS)
+const CUSTOMER_KINDS=['retail','ctv'],LEAD_STATUSES=['new','contacted','ordered','lost'];
+function cleanLine(x,max,required){if(x===undefined||x===null)x='';if(typeof x!=='string')return null;const y=x.trim().replace(/\s+/g,' ');if(y.length>max||/[<>]/.test(y)||(required&&!y))return null;return y}
+function cleanCustomer(i){
+ if(!i||typeof i!=='object'||Array.isArray(i))return null;
+ const name=cleanLine(i.name,100,true),phone=cleanLine(i.phone,30),note=cleanLine(i.note,300);
+ if(name===null||phone===null||note===null||!/^[0-9+().\s-]*$/.test(phone)||!CUSTOMER_KINDS.includes(i.kind||'retail'))return null;
+ return {name,phone,kind:i.kind||'retail',note}}
+function cleanLead(i){
+ if(!i||typeof i!=='object'||Array.isArray(i))return null;
+ const name=cleanLine(i.name,100,true),phone=cleanLine(i.phone,30),need=cleanLine(i.need,500),source=cleanLine(i.source,60);
+ if(name===null||phone===null||need===null||source===null||!/^[0-9+().\s-]*$/.test(phone))return null;
+ const status=i.status===undefined?'new':i.status,bid=i.booking_id===undefined?'':i.booking_id;
+ if(!LEAD_STATUSES.includes(status)||!(bid===''||(typeof bid==='string'&&/^ST[0-9]{1,12}$/.test(bid))))return null;
+ return {name,phone,need,source,status,booking_id:bid}}
+const newCrmId=prefix=>prefix+crypto.randomUUID().replace(/-/g,'').slice(0,12);
+async function crmApi(req,env,path){
+ // Trả về null nếu không phải đường dẫn khách hàng/lead
+ const m=/^\/api\/(customers|leads)(?:\/([a-z0-9]{4,26}))?$/.exec(path);if(!m)return null;
+ const kind=m[1],id=m[2];
+ if(!env.BOOKINGS)return json({error:'Chưa kết nối kho đơn hàng.'},503);
+ const table=kind,isCustomer=kind==='customers',clean=isCustomer?cleanCustomer:cleanLead;
+ const missing=e=>/no such table/i.test(String(e?.message||e));
+ try{
+  if(!id&&req.method==='GET'){const {results}=await env.BOOKINGS.prepare('SELECT * FROM '+table+' ORDER BY created').all();return json({[kind]:results})}
+  if(!id&&req.method==='POST'){
+   if(Number(req.headers.get('content-length')||0)>20000)return json({error:'Dữ liệu quá lớn.'},413);
+   let input;try{input=await req.json()}catch{return json({error:'Nội dung không hợp lệ.'},400)}
+   const d=clean(input);if(!d)return json({error:isCustomer?'Thông tin khách hàng không hợp lệ.':'Thông tin lead không hợp lệ.'},400);
+   const cnt=await env.BOOKINGS.prepare('SELECT COUNT(*) AS n FROM '+table).first();if((cnt?.n||0)>=20000)return json({error:'Đã đạt giới hạn số lượng.'},400);
+   const now=new Date().toISOString(),nid=newCrmId(isCustomer?'c':'l');
+   if(isCustomer)await env.BOOKINGS.prepare('INSERT INTO customers(id,name,phone,kind,note,created,updated) VALUES(?,?,?,?,?,?,?)').bind(nid,d.name,d.phone,d.kind,d.note,now,now).run();
+   else await env.BOOKINGS.prepare('INSERT INTO leads(id,name,phone,need,source,status,booking_id,created,updated) VALUES(?,?,?,?,?,?,?,?,?)').bind(nid,d.name,d.phone,d.need,d.source,d.status,d.booking_id,now,now).run();
+   const row=await env.BOOKINGS.prepare('SELECT * FROM '+table+' WHERE id=?').bind(nid).first();return json({[isCustomer?'customer':'lead']:row},201)}
+  if(id&&req.method==='PUT'){
+   if(Number(req.headers.get('content-length')||0)>20000)return json({error:'Dữ liệu quá lớn.'},413);
+   let input;try{input=await req.json()}catch{return json({error:'Nội dung không hợp lệ.'},400)}
+   const d=clean(input);if(!d)return json({error:isCustomer?'Thông tin khách hàng không hợp lệ.':'Thông tin lead không hợp lệ.'},400);
+   const old=await env.BOOKINGS.prepare('SELECT id FROM '+table+' WHERE id=?').bind(id).first();if(!old)return json({error:'Không tìm thấy.'},404);
+   const now=new Date().toISOString();
+   if(isCustomer)await env.BOOKINGS.prepare('UPDATE customers SET name=?,phone=?,kind=?,note=?,updated=? WHERE id=?').bind(d.name,d.phone,d.kind,d.note,now,id).run();
+   else await env.BOOKINGS.prepare('UPDATE leads SET name=?,phone=?,need=?,source=?,status=?,booking_id=?,updated=? WHERE id=?').bind(d.name,d.phone,d.need,d.source,d.status,d.booking_id,now,id).run();
+   const row=await env.BOOKINGS.prepare('SELECT * FROM '+table+' WHERE id=?').bind(id).first();return json({[isCustomer?'customer':'lead']:row})}
+  if(id&&req.method==='DELETE'){
+   if(isCustomer){const used=await env.BOOKINGS.prepare('SELECT id FROM bookings WHERE data LIKE ? OR data LIKE ? LIMIT 1').bind('%"customerId":"'+id+'"%','%"ctvId":"'+id+'"%').first();if(used)return json({error:'Khách này đã có đơn hoặc hoa hồng nên chưa xóa được.'},409)}
+   await env.BOOKINGS.prepare('DELETE FROM '+table+' WHERE id=?').bind(id).run();return json({ok:true})}
+  return json({error:'Không hỗ trợ.'},405)
+ }catch(e){if(missing(e))return json({error:'Chưa tạo bảng '+table+' trong kho đơn hàng. Chạy phần mới của schema-bookings.sql trong tab Console của D1.'},503);return json({error:'Chưa xử lý được yêu cầu.'},500)}
+}
+function validateBooking(b,expected){if(!b||typeof b!=='object'||Array.isArray(b))throw Error('Dữ liệu đơn hàng không hợp lệ.');if(typeof b.id!=='string'||!/^ST[0-9]{1,12}$/.test(b.id)||(expected&&b.id!==expected))throw Error('Mã đơn không hợp lệ.');if(typeof b.name!=='string'||b.name.length>200||typeof b.phone!=='string'||b.phone.length>60)throw Error('Tên hoặc số điện thoại không hợp lệ.');if(!Array.isArray(b.svcs)||b.svcs.length>60||!b.svcs.every(x=>x&&typeof x==='object'&&!Array.isArray(x)))throw Error('Danh sách dịch vụ không hợp lệ.');if(!Array.isArray(b.payments)||b.payments.length>200||!b.payments.every(x=>x&&typeof x==='object'&&Number.isFinite(x.amount)))throw Error('Danh sách thanh toán không hợp lệ.');if(!Number.isFinite(b.totalAmt)||b.totalAmt<0)throw Error('Tổng tiền không hợp lệ.');validateCrmFields(b);if(JSON.stringify(b).length>150000)throw Error('Dữ liệu đơn quá lớn.');return b}
 // ---- Bài đăng Facebook/Threads (lịch đăng, sửa bài, mẫu phong cách) ----
 const POST_PLATFORMS=['FACEBOOK','THREADS'],POST_LEAD_MS=5*60000,POST_MAX_IMAGES=10;
 const postClock=ms=>new Date(ms+7*3600000).toISOString().slice(0,16).replace('T',' ');
@@ -291,6 +359,7 @@ if(path==='/api/booking-settings'){
  return json({error:'Không hỗ trợ.'},405)
 }
 if(path==='/api/posts'||path.startsWith('/api/posts/'))return postsApi(req,env,path);
+const crm=await crmApi(req,env,path);if(crm)return crm;
 if(path==='/api/booking'||path.startsWith('/api/booking/')){
  // Đơn hàng nằm trong database riêng (binding BOOKINGS), tách hẳn khỏi nội dung website.
  if(!env.BOOKINGS)return json({error:'Chưa kết nối kho đơn hàng.'},503);
@@ -301,7 +370,8 @@ if(path==='/api/booking'||path.startsWith('/api/booking/')){
   if(Number(req.headers.get('content-length')||0)>200000)return json({error:'Dữ liệu quá lớn.'},413);
   let input,data;try{input=await req.json()}catch{return json({error:'Nội dung không hợp lệ.'},400)}
   try{data=validateBooking(input?.booking,bid)}catch(e){return json({error:e.message},400)}
-  const now=new Date().toISOString(),text=JSON.stringify(data),exists=await env.BOOKINGS.prepare('SELECT id FROM bookings WHERE id=?').bind(data.id).first();
+  const stamp=new Date().toISOString();if(req.method==='POST'){if(!data.createdBy)data.createdBy=EMAIL;if(!data.owner)data.owner=EMAIL}data.updatedBy=EMAIL;data.updatedAt=stamp;
+  const now=stamp,text=JSON.stringify(data),exists=await env.BOOKINGS.prepare('SELECT id FROM bookings WHERE id=?').bind(data.id).first();
   if(req.method==='POST'){if(exists)return json({error:'Mã đơn đã tồn tại.'},409);try{await env.BOOKINGS.prepare('INSERT INTO bookings(id,data,created,updated) VALUES(?,?,?,?)').bind(data.id,text,now,now).run()}catch{return json({error:'Mã đơn đã tồn tại.'},409)}return json({ok:true},201)}
   if(!exists)return json({error:'Không tìm thấy đơn.'},404);
   await env.BOOKINGS.prepare('UPDATE bookings SET data=?,updated=? WHERE id=?').bind(text,now,data.id).run();return json({ok:true})
