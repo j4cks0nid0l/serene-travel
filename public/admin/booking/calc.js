@@ -265,10 +265,77 @@
     return s.totalNet ? 'full' : 'none';
   }
 
+  // ---- Trạng thái đơn, tiền đã duyệt, hoa hồng ----
+  // Đơn cũ chưa có trạng thái đơn được coi là đã chốt (Thành công).
+  var ORDER_STATUSES = ['processing', 'success', 'cancelled'];
+  var ORDER_STATUS_LABELS = { processing: 'Đang xử lý', success: 'Thành công', cancelled: 'Hủy' };
+  function orderStatusOf(b) { return b && ORDER_STATUSES.indexOf(b.orderStatus) >= 0 ? b.orderStatus : 'success'; }
+  // Phiếu thu cũ chưa có trạng thái được coi là đã duyệt.
+  function isApproved(p) { return !!p && p.status !== 'pending'; }
+  function paidOf(b) {
+    return ((b && b.payments) || []).reduce(function (a, p) { return a + (isApproved(p) ? (Number(p.amount) || 0) : 0); }, 0);
+  }
+  function pendingOf(b) {
+    return ((b && b.payments) || []).reduce(function (a, p) { return a + (isApproved(p) ? 0 : (Number(p.amount) || 0)); }, 0);
+  }
+  function commissionOf(b) {
+    var c = b && b.commission;
+    return c && Number(c.amount) > 0 ? Number(c.amount) : 0;
+  }
+  // Hoa hồng chỉ phải trả khi đơn đã Thành công.
+  function commissionDue(b) { return orderStatusOf(b) === 'success' ? commissionOf(b) : 0; }
+  function phoneKey(x) { return String(x == null ? '' : x).replace(/\D/g, ''); }
+  function bookingCustomerId(b, customers) {
+    if (b && b.customerId) return b.customerId;
+    var k = phoneKey(b && b.phone);
+    if (!k) return '';
+    for (var i = 0; i < (customers || []).length; i++) if (phoneKey(customers[i].phone) === k) return customers[i].id;
+    return '';
+  }
+  // Mỗi khách: doanh thu (đơn Thành công), đã thu (phiếu đã duyệt), công nợ, tiền nhận trước (đơn đang xử lý), tiền cần hoàn (đơn hủy)
+  function customerLedger(bookings, customers) {
+    var rows = {}, order = [];
+    (customers || []).forEach(function (c) {
+      rows[c.id] = { id: c.id, name: c.name, phone: c.phone || '', kind: c.kind || 'retail', note: c.note || '', orders: [], count: 0, revenue: 0, paid: 0, debt: 0, prepaid: 0, refundDue: 0 };
+      order.push(c.id);
+    });
+    (bookings || []).forEach(function (b) {
+      var id = bookingCustomerId(b, customers);
+      if (!id || !rows[id]) return;
+      var r = rows[id], st = orderStatusOf(b), paid = paidOf(b);
+      r.orders.push(b.id); r.count++;
+      if (st === 'success') { r.revenue += b.totalAmt || 0; r.paid += paid; r.debt += (b.totalAmt || 0) - paid; }
+      else if (st === 'processing') r.prepaid += paid;
+      else r.refundDue += paid;
+    });
+    return order.map(function (id) { return rows[id]; });
+  }
+  // Hoa hồng theo cộng tác viên (chỉ đơn Thành công)
+  function commissionStats(bookings, customers) {
+    var by = {}, order = [], total = 0, paid = 0;
+    (bookings || []).forEach(function (b) {
+      var amt = commissionDue(b);
+      if (!(amt > 0)) return;
+      var id = (b.commission && b.commission.ctvId) || '';
+      if (!by[id]) {
+        var c = null;
+        for (var i = 0; i < (customers || []).length; i++) if (customers[i].id === id) c = customers[i];
+        by[id] = { id: id, name: c ? c.name : 'Chưa chọn cộng tác viên', count: 0, total: 0, paid: 0, unpaid: 0, orders: [] };
+        order.push(id);
+      }
+      var r = by[id], isPaid = !!(b.commission && b.commission.paid);
+      r.count++; r.total += amt; r.orders.push(b.id);
+      if (isPaid) { r.paid += amt; paid += amt; } else r.unpaid += amt;
+      total += amt;
+    });
+    return { rows: order.map(function (id) { return by[id]; }), total: total, paid: paid, unpaid: total - paid };
+  }
+
   // ---- Thống kê theo loại ----
   function statsByCat(bookings, cats) {
     var rows = {}, order = [];
     (bookings || []).forEach(function (b) {
+      if (orderStatusOf(b) === 'cancelled') return;
       (b.svcs || []).forEach(function (s) {
         var id = catIdOf(s);
         if (!rows[id]) { rows[id] = { id: id, name: catNameOf(s, cats), count: 0, revenue: 0, netRevenue: 0, net: 0, netCount: 0 }; order.push(id); }
@@ -283,7 +350,7 @@
   }
 
   // ---- CSV: mỗi nhóm người một dòng ----
-  var CSV_HEAD = ['Mã đơn', 'Ngày tạo', 'Khách', 'SĐT', 'Trạng thái', 'Loại dịch vụ', 'Dịch vụ', 'Nhóm', 'Chiều', 'Ngày đi', 'Ngày về', 'Số lượng', 'Đơn giá bán', 'Thành tiền', 'Đơn giá net', 'Tổng net', 'Tổng đơn', 'Đã thu', 'Còn lại'];
+  var CSV_HEAD = ['Mã đơn', 'Ngày tạo', 'Khách', 'SĐT', 'Trạng thái', 'Loại dịch vụ', 'Dịch vụ', 'Nhóm', 'Chiều', 'Ngày đi', 'Ngày về', 'Số lượng', 'Đơn giá bán', 'Thành tiền', 'Đơn giá net', 'Tổng net', 'Tổng đơn', 'Đã thu', 'Còn lại', 'Trạng thái đơn', 'Hoa hồng', 'Hoa hồng đã trả'];
   function legacyQty(l) {
     var t = (l.qty + ' ' + (l.unit || '')).trim();
     if (l.qty2 != null && l.unit2 !== 'đêm') t += ' x ' + l.qty2 + ' ' + (l.unit2 || '');
@@ -292,16 +359,17 @@
   function csvRows(bookings, statusLabels, cats) {
     var rows = [CSV_HEAD.slice()];
     (bookings || []).forEach(function (b) {
-      var paid = (b.payments || []).reduce(function (a, p) { return a + p.amount; }, 0);
+      var paid = paidOf(b);
       var st = (statusLabels && statusLabels[b.status]) || b.status;
+      var os = ORDER_STATUS_LABELS[orderStatusOf(b)], hh = commissionOf(b) || '', hhPaid = commissionOf(b) ? (b.commission.paid ? 'Đã trả' : 'Chưa trả') : '';
       var svcs = b.svcs && b.svcs.length ? b.svcs : [null];
       svcs.forEach(function (s) {
-        if (!s) { rows.push([b.id, b.created, b.name, b.phone, st, '', '', '', '', '', '', '', '', '', '', '', b.totalAmt, paid, b.totalAmt - paid]); return; }
+        if (!s) { rows.push([b.id, b.created, b.name, b.phone, st, '', '', '', '', '', '', '', '', '', '', '', b.totalAmt, paid, b.totalAmt - paid, os, hh, hhPaid]); return; }
         var chieu = s.trip === 'round' ? 'Khứ hồi' : s.trip === 'oneway' ? 'Một chiều' : '';
         svcLines(s).forEach(function (l) {
           var qtyTxt = l.key ? (l.qty + ' ' + (l.unit || '')).trim() : (l.qty ? legacyQty(l) : '');
           rows.push([b.id, b.created, b.name, b.phone, st, catNameOf(s, cats), s.name || '', l.label || '', chieu, s.dateIn || '', s.dateOut || '', qtyTxt,
-            l.price == null ? '' : l.price, l.total || '', l.net || '', l.totalNet || '', b.totalAmt, paid, b.totalAmt - paid]);
+            l.price == null ? '' : l.price, l.total || '', l.net || '', l.totalNet || '', b.totalAmt, paid, b.totalAmt - paid, os, hh, hhPaid]);
         });
       });
     });
@@ -315,6 +383,8 @@
     isLegacy: isLegacy, isGroup: isGroup, groupKeys: groupKeys,
     buildService: buildService, svcLines: svcLines, unitsOf: unitsOf, applyNet: applyNet, netState: netState,
     statsByCat: statsByCat, csvRows: csvRows,
+    ORDER_STATUSES: ORDER_STATUSES, ORDER_STATUS_LABELS: ORDER_STATUS_LABELS, orderStatusOf: orderStatusOf, isApproved: isApproved, paidOf: paidOf, pendingOf: pendingOf,
+    commissionOf: commissionOf, commissionDue: commissionDue, bookingCustomerId: bookingCustomerId, customerLedger: customerLedger, commissionStats: commissionStats,
     NOTE_MAX: NOTE_MAX, cleanText: cleanText, validPhone: validPhone, validEmail: validEmail, validPartnerName: validPartnerName,
     parseServices: parseServices, parseEmails: parseEmails, mergeEmails: mergeEmails, gmailUrl: gmailUrl, gmailAppUrl: gmailAppUrl, mailtoUrl: mailtoUrl, normalizePartners: normalizePartners, partnersForCat: partnersForCat, findPartner: findPartner
   };
