@@ -120,12 +120,13 @@
     });
     return out;
   }
-  function templateCsv() {
-    return toCsv([HEAD,
+  function templateRows() {
+    return [HEAD,
       ['VÍ DỤ Khách sạn A', '1 Đường B, Nha Trang', '0258 000 000', '', 'Deluxe Sea View', 'Thấp điểm', '01/01/2027', '31/03/2027', 1200000, '', 'VÍ DỤ: trẻ dưới 6 tuổi miễn phí, phụ thu giường phụ 400.000đ'],
       ['VÍ DỤ Khách sạn A', '', '', '', 'Deluxe Sea View', 'Cao điểm', '01/04/2027', '31/08/2027', 1500000, 1700000, ''],
-      ['VÍ DỤ Khách sạn A', '', '', '', 'Suite', 'Thấp điểm', '01/01/2027', '31/03/2027', 2400000, '', '']]);
+      ['VÍ DỤ Khách sạn A', '', '', '', 'Suite', 'Thấp điểm', '01/01/2027', '31/03/2027', 2400000, '', '']];
   }
+  function templateCsv() { return toCsv(templateRows()); }
 
   // rows: mảng các mảng (kết quả parseCsv). Dòng đầu là tiêu đề. Dòng có "VÍ DỤ" ở cột khách sạn bị bỏ qua.
   // opts: {partners, defaultPartner}. Trả {items:[{name,address,phone,note,rows}], errors:[{line,msg}], fatal}
@@ -300,7 +301,7 @@
   var api = {
     MIN_NET: MIN_NET, NO_P: NO_P, HEAD: HEAD, key: key, dmy: dmy, parseDmy: parseDmy, parseMoney: parseMoney,
     cleanRows: cleanRows, nightPrice: nightPrice, quote: quote, roomsOf: roomsOf, matchRoom: matchRoom, suggest: suggest,
-    toCsv: toCsv, exportRows: exportRows, templateCsv: templateCsv, buildRates: buildRates,
+    toCsv: toCsv, exportRows: exportRows, templateCsv: templateCsv, templateRows: templateRows, buildRates: buildRates,
     parseCsvText: parseCsvText, parseSheet: parseSheet, parseCommitment: parseCommitment
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.RT = api;

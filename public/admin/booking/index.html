@@ -10,6 +10,7 @@
 <script src="/vendor/html2canvas.min.js"></script>
 <script src="/admin/booking/calc.js"></script>
 <script src="/admin/booking/rates.js"></script>
+<script src="/admin/booking/xlsx.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#F0F4F8;min-height:100vh;font-family:"Be Vietnam Pro",sans-serif;color:#2C3E50;font-size:14px}
@@ -291,6 +292,7 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
 .sup-per{border:.5px solid rgba(58,125,153,.2);border-radius:9px;padding:9px 10px;margin-top:8px}
 .sup-top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
 .sup-ord{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:#5B7285;padding:3px 0}
+.imp-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px}.imp-btns button{width:100%}
 .rt-box{border:.5px solid rgba(58,125,153,.28);background:#F4F9FB;border-radius:10px;padding:9px 11px;margin:0 0 10px;font-size:12.5px}
 .rt-h{font-weight:600;margin-bottom:6px}.rt-s{font-weight:400;font-size:11px;color:#7A8FA0}
 .rt-opt{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 8px;border-radius:8px;background:#fff;border:.5px solid rgba(58,125,153,.18);margin-top:6px}
@@ -320,6 +322,7 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
       <button class="sb-sub-item" data-sub="hotels" onclick="go('settings','hotels')">Thông tin khách sạn</button>
       <button class="sb-sub-item" data-sub="rates" onclick="go('settings','rates')">Bảng giá net</button>
       <button class="sb-sub-item" data-sub="note" onclick="go('settings','note')">Ghi chú cuối phiếu</button>
+      <button class="sb-sub-item" data-sub="import" onclick="go('settings','import')">Nhập dữ liệu</button>
       <button class="sb-sub-item" data-sub="data" onclick="go('settings','data')">Dữ liệu</button>
     </div>
   </nav>
@@ -502,19 +505,34 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
     <input id="rt-search" placeholder="Tìm khách sạn" oninput="renderRates()" style="margin-bottom:8px">
     <div id="rt-list"></div>
     <div id="rt-detail" class="rt-detail"></div>
-    <div style="margin-top:16px;padding-top:14px;border-top:.5px dashed rgba(58,125,153,.25)">
-      <div class="sec-title"><i class="ti ti-file-import"></i>Nhập bảng giá từ file</div>
-      <div style="font-size:12.5px;color:#5B7285;line-height:1.5;margin-bottom:10px">
-        1. Tải file mẫu, mở bằng Excel hoặc Google Sheets. Mỗi dòng là một hạng phòng trong một khoảng ngày.<br>
-        2. Địa chỉ, hotline, ghi chú chỉ cần điền ở dòng đầu của mỗi khách sạn. Cột Đối tác để trống thì dùng đối tác chọn ở dưới.<br>
-        3. Lưu thành <b>CSV UTF-8</b>, chọn file, xem trước rồi bấm Nhập.<br>
-        Khách sạn nào đã có bảng giá sẽ được <b>thay hoàn toàn</b> bằng dữ liệu trong file.
+    <button class="btn-outline" style="width:100%;margin-top:14px" onclick="go('settings','import')"><i class="ti ti-file-import"></i>Nhập bảng giá từ file Excel</button>
+  </div>
+  <div class="card set-page" data-page="import">
+    <div class="sec-title"><i class="ti ti-file-import"></i>Nhập dữ liệu từ file</div>
+    <div style="font-size:12.5px;color:#5B7285;line-height:1.5;margin-bottom:6px">Làm hai bước: <b>tải form mẫu xuống</b> để điền, rồi <b>tải file dữ liệu lên</b>. Nhận file Excel (.xlsx) và CSV. App cho xem trước, bạn kiểm tra rồi mới bấm Nhập.</div>
+
+    <div style="margin-top:14px;padding-top:12px;border-top:.5px dashed rgba(58,125,153,.25)">
+      <div class="sec-title"><i class="ti ti-receipt"></i>Đơn hàng</div>
+      <div style="font-size:12px;color:#7A8FA0;line-height:1.5;margin-bottom:8px">Mỗi dòng là một dịch vụ. Các dòng cùng <b>Nhóm đơn</b> (A1, A2...) gộp thành một đơn. Loại dịch vụ và Đối tác chọn trong danh sách của form. Xóa các dòng VÍ DỤ trước khi tải lên.</div>
+      <div class="imp-btns">
+        <button class="btn-outline" onclick="downloadImportTemplate()"><i class="ti ti-download"></i>Tải form mẫu xuống</button>
+        <button class="btn-main" style="margin-top:0" onclick="$('imp-file').click()"><i class="ti ti-upload"></i>Tải file dữ liệu lên</button>
       </div>
-      <button class="btn-outline" style="width:100%;margin-bottom:8px" onclick="rtDownloadTemplate()"><i class="ti ti-download"></i>Tải file mẫu bảng giá</button>
-      <button class="btn-outline" style="width:100%;margin-bottom:8px" onclick="rtExportAll()"><i class="ti ti-file-spreadsheet"></i>Tải toàn bộ bảng giá hiện có (CSV)</button>
+      <input type="file" id="imp-file" accept=".xlsx,.csv,text/csv,.txt" onchange="importPick(this)" hidden>
+      <div id="imp-preview"></div>
+    </div>
+
+    <div style="margin-top:16px;padding-top:12px;border-top:.5px dashed rgba(58,125,153,.25)">
+      <div class="sec-title"><i class="ti ti-currency-dong"></i>Bảng giá net khách sạn</div>
+      <div style="font-size:12px;color:#7A8FA0;line-height:1.5;margin-bottom:8px">Mỗi dòng là một hạng phòng trong một khoảng ngày. Khách sạn nào đã có bảng giá sẽ được <b>thay hoàn toàn</b> bằng dữ liệu trong file.</div>
       <label>Đối tác cho các dòng để trống cột Đối tác</label>
       <select id="rt-defp" style="margin-bottom:8px"></select>
-      <input type="file" id="rt-file" accept=".csv,text/csv,.txt" onchange="rtPick(this)" style="width:100%;margin-bottom:8px">
+      <div class="imp-btns">
+        <button class="btn-outline" onclick="rtDownloadTemplate()"><i class="ti ti-download"></i>Tải form mẫu xuống</button>
+        <button class="btn-main" style="margin-top:0" onclick="$('rt-file').click()"><i class="ti ti-upload"></i>Tải file dữ liệu lên</button>
+      </div>
+      <input type="file" id="rt-file" accept=".xlsx,.csv,text/csv,.txt" onchange="rtPick(this)" hidden>
+      <button class="btn-outline" style="width:100%;margin-top:8px" onclick="rtExportAll()"><i class="ti ti-file-spreadsheet"></i>Tải bảng giá hiện có xuống (CSV)</button>
       <div id="rt-preview"></div>
     </div>
   </div>
@@ -531,19 +549,6 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
   <div class="card set-page" data-page="data">
     <div class="sec-title"><i class="ti ti-database"></i>Dữ liệu</div>
     <button class="btn-outline" style="width:100%" onclick="downloadCSV()"><i class="ti ti-file-spreadsheet"></i>Tải bảng đơn hàng (CSV, mở bằng Excel / Google Sheets)</button>
-    <div style="margin-top:16px;padding-top:14px;border-top:.5px dashed rgba(58,125,153,.25)">
-      <div class="sec-title"><i class="ti ti-file-import"></i>Nhập nhiều đơn từ file</div>
-      <div style="font-size:12.5px;color:#5B7285;line-height:1.5;margin-bottom:10px">
-        1. Tải file mẫu, mở bằng Excel hoặc Google Sheets.<br>
-        2. Mỗi dòng là một dịch vụ. Các dòng cùng <b>Nhóm đơn</b> (ví dụ A1, A2) gộp thành một đơn. Xóa các dòng VÍ DỤ.<br>
-        3. Cột ngày nên đặt định dạng Văn bản để không mất số 0 đầu.<br>
-        4. Lưu thành <b>CSV UTF-8</b>, chọn file ở dưới, xem trước rồi bấm Nhập.<br>
-        Loại dịch vụ và Đối tác phải gõ đúng tên đã có trong Cài đặt.
-      </div>
-      <button class="btn-outline" style="width:100%;margin-bottom:8px" onclick="downloadImportTemplate()"><i class="ti ti-download"></i>Tải file mẫu nhập đơn</button>
-      <input type="file" id="imp-file" accept=".csv,text/csv,.txt" onchange="importPick(this)" style="width:100%;margin-bottom:8px">
-      <div id="imp-preview"></div>
-    </div>
   </div>
 </div>
 
@@ -2270,7 +2275,7 @@ function rtDownload(text,file){
   const blob=new Blob([text],{type:"text/csv;charset=utf-8"}), a=document.createElement("a");
   a.href=URL.createObjectURL(blob); a.download=file; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),2000);
 }
-function rtDownloadTemplate(){ rtDownload(RT.templateCsv(),"serene-mau-bang-gia.csv"); }
+function rtDownloadTemplate(){ downloadXlsx(rateTemplateXlsx(),"serene-mau-bang-gia.xlsx"); }
 async function rtExportAll(){
   if(!rateList.length){ toast("Chưa có bảng giá để tải",3000); return; }
   toast("Đang tải bảng giá...",2000);
@@ -2278,15 +2283,12 @@ async function rtExportAll(){
   for(const h of rateList){ const r=await rateLoad(h.name); if(r) recs.push({...r,address:(hotels.find(x=>hkey(x.name)===hkey(h.name))||{}).address||"",phone:(hotels.find(x=>hkey(x.name)===hkey(h.name))||{}).phone||""}); }
   rtDownload(RT.toCsv(RT.exportRows(recs,partners)),"serene-bang-gia-hien-co.csv");
 }
-function rtPick(inp){
+async function rtPick(inp){
   const f=inp.files&&inp.files[0]; rtPlan=null; $("rt-preview").innerHTML="";
   if(!f) return;
-  if(f.size>5000000){ toast("File quá lớn (tối đa 5 MB)",4000); return; }
-  const rd=new FileReader();
-  rd.onload=()=>{
-    const text=String(rd.result||"");
-    if(text.includes("�")){ $("rt-preview").innerHTML='<div class="warn-box">File bị lỗi font tiếng Việt. Trong Excel chọn Lưu thành, loại <b>CSV UTF-8 (Comma delimited)</b>, rồi chọn lại file.</div>'; return; }
-    const r=RT.buildRates(BK.parseCsv(text),{partners,defaultPartner:$("rt-defp").value});
+  let table;
+  try{ table=await readTableFile(f); }catch(e){ $("rt-preview").innerHTML='<div class="warn-box">'+esc(e.message)+'</div>'; return; }
+    const r=RT.buildRates(table,{partners,defaultPartner:$("rt-defp").value});
     if(r.fatal){ $("rt-preview").innerHTML='<div class="warn-box">'+esc(r.fatal)+'</div>'; return; }
     const have=new Set(rateList.map(h=>hkey(h.name))), replace=r.items.filter(h=>have.has(hkey(h.name))).length;
     const rows=r.items.reduce((a,h)=>a+h.rows.length,0), today=todayIso();
@@ -2298,8 +2300,6 @@ function rtPick(inp){
       ${r.items.slice(0,8).map(h=>`<div class="sup-ord"><span>${esc(h.name)}</span><span>${h.rows.length} dòng</span></div>`).join("")}${r.items.length>8?`<div class="rt-s">và ${r.items.length-8} khách sạn nữa</div>`:""}
       ${r.items.length?`<button class="btn-main" style="margin-top:10px" onclick="rtRun()"><i class="ti ti-file-import"></i>Nhập ${r.items.length} khách sạn</button>`:""}
     </div>`;
-  };
-  rd.readAsText(f,"utf-8");
 }
 function rtRun(){
   if(!rtPlan||!rtPlan.items.length) return;
@@ -2368,22 +2368,77 @@ function rateUse(i,idx){
   toast(diff?`Đã điền net ${VNDn(per)} đ/đêm. Tổng theo bảng giá là ${VNDn(o.total)} đ, lệch ${VNDn(Math.abs(diff))} đ do làm tròn.`:`Đã điền net ${VNDn(per)} đ/đêm (tổng ${VNDn(o.total)} đ).`,4500);
 }
 
-let impPlan=null;
-function downloadImportTemplate(){
-  const blob=new Blob([BK.importTemplateCsv(catList,partners)],{type:"text/csv;charset=utf-8"});
-  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="serene-mau-nhap-don.csv";
-  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+// ── Đọc file nhập (Excel hoặc CSV) và tạo form mẫu Excel ──
+async function readTableFile(f){
+  if(f.size>5000000) throw new Error("File quá lớn (tối đa 5 MB)");
+  if(/\.xlsx$/i.test(f.name)) return await XR.readFirstSheet(await f.arrayBuffer());
+  if(/\.xls$/i.test(f.name)) throw new Error("File .xls (Excel đời cũ) chưa đọc được. Mở bằng Excel, chọn Lưu thành, loại Excel Workbook (.xlsx), rồi chọn lại.");
+  const text=await f.text();
+  if(text.includes("�")) throw new Error("File CSV bị lỗi font tiếng Việt. Trong Excel chọn Lưu thành, loại CSV UTF-8 (Comma delimited), hoặc lưu thành Excel Workbook (.xlsx).");
+  return BK.parseCsv(text);
 }
+function downloadXlsx(bytes,file){
+  const blob=new Blob([bytes],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}), a=document.createElement("a");
+  a.href=URL.createObjectURL(blob); a.download=file; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+}
+function guideSheet(title,lines){
+  const rows=[[title],[""]].concat(lines.map(l=>[l]));
+  return {name:"Hướng dẫn",rows,widths:[110],wrapCols:[0],note:true};
+}
+function orderTemplateXlsx(){
+  const H=BK.IMPORT_HEAD, rows=BK.importTemplateRows(catList,partners);
+  const idx=k=>XR.colName(H.indexOf(k)), last=1001;
+  const cats=catList.map(c=>c.name), pnames=partners.map(p=>p.name), sts=Object.values(BK.ORDER_STATUS_LABELS);
+  const lists=[["Loại dịch vụ","Đối tác","Trạng thái đơn"]];
+  for(let i=0;i<Math.max(cats.length,pnames.length,sts.length);i++) lists.push([cats[i]||"",pnames[i]||"",sts[i]||""]);
+  const nz=n=>Math.max(n,1)+1+(n>0?0:0);
+  const v=(k,f,err)=>({sqref:idx(k)+"2:"+idx(k)+last,type:"list",formula:f,error:err});
+  const sheets=[
+    {name:"Đơn hàng",rows,widths:H.map(h=>/Tên|Ghi chú/.test(h)?24:/Loại|Đối tác|Trạng thái|Chiều/.test(h)?20:14),textCols:H.map((_,i)=>i),exampleRows:rows.slice(1).map((_,i)=>i+1),
+      validations:[
+        v("Loại dịch vụ","'Danh sách'!$A$2:$A$"+nz(cats.length),"Chọn loại dịch vụ trong danh sách (đã tạo ở Cài đặt)"),
+        v("Đối tác","'Danh sách'!$B$2:$B$"+nz(pnames.length),"Chọn đối tác trong danh sách (đã tạo ở Cài đặt)"),
+        v("Trạng thái đơn",'"'+sts.join(",")+'"',"Chọn một trạng thái trong danh sách"),
+        v("Chiều (Một chiều hoặc Khứ hồi)",'"Một chiều,Khứ hồi"',"Chọn Một chiều hoặc Khứ hồi")]},
+    {name:"Danh sách",rows:lists,widths:[26,26,20]},
+    guideSheet("CÁCH ĐIỀN FORM NHẬP ĐƠN",[
+      "Mỗi dòng là một dịch vụ. Các dòng cùng Nhóm đơn (ví dụ A1, A2) sẽ gộp thành một đơn. Các dòng xám đầu tiên là VÍ DỤ, app tự bỏ qua, có thể giữ hoặc xóa.",
+      "Tên khách, SĐT, Loại dịch vụ, Đối tác, Tên dịch vụ là bắt buộc. Loại dịch vụ, Đối tác, Trạng thái đơn và Chiều chọn trong danh sách xổ xuống.",
+      "Ngày: gõ dd/mm/yyyy (ví dụ 25/12/2026). Mã tham chiếu giúp tránh nhập trùng nếu bạn nhập lại cùng một file.",
+      "Phòng, xe, vé một nhóm: điền Số lượng, Giá bán, Giá net. Tour hoặc vé chia người lớn, trẻ em, cao tuổi: điền các cột SL, Giá bán, Net theo từng nhóm.",
+      "Điền xong, lưu file rồi vào Cài đặt, Nhập dữ liệu, bấm Tải file dữ liệu lên. App cho xem trước rồi bạn mới bấm Nhập."])
+  ];
+  return XR.build(sheets);
+}
+function rateTemplateXlsx(){
+  const rows=RT.templateRows(), pn=partners.map(p=>p.name), last=601;
+  const sheets=[
+    {name:"Bảng giá",rows,widths:[30,28,16,20,28,16,13,13,15,15,50],textCols:[0,1,2,3,4,5,6,7,10],wrapCols:[],exampleRows:[1,2,3],
+      validations:[
+        {sqref:"D5:D"+last,type:"list",formula:"'Đối tác'!$A$2:$A$"+(Math.max(pn.length,1)+60),error:"Chọn đối tác trong danh sách. Thêm đối tác mới ở sheet Đối tác."},
+        {sqref:"I5:J"+last,type:"whole",formula:"50000",formula2:"100000000",error:"Nhập số nguyên, không dấu chấm hoặc phẩy. Ví dụ 1200000"},
+        {sqref:"G5:H"+last,type:"custom",formula:'AND(LEN(G5)=10,MID(G5,3,1)="/",MID(G5,6,1)="/")',error:"Gõ ngày đúng dạng dd/mm/yyyy, ví dụ 01/04/2027"}]},
+    guideSheet("CÁCH ĐIỀN BẢNG GIÁ NET KHÁCH SẠN",[
+      "Mỗi dòng là một hạng phòng trong một khoảng ngày, kèm giá net 1 đêm (giá bạn mua). Các dòng xám đầu tiên là VÍ DỤ, app tự bỏ qua.",
+      "Khách sạn: gõ giống nhau ở mọi dòng của cùng một khách sạn. Địa chỉ, Hotline, Ghi chú chỉ cần điền ở dòng đầu của mỗi khách sạn. Ghi chú là chính sách phụ thu (cuối tuần, lễ, trẻ em, giường phụ), hiện khi tạo đơn.",
+      "Đối tác: chọn trong danh sách. Để trống nếu chưa biết, app gán theo đối tác bạn chọn lúc nhập. Một khách sạn có nhiều đối tác thì mỗi đối tác một nhóm dòng.",
+      "Hạng phòng: gõ giống nhau ở mọi mùa của cùng hạng phòng vì app nối các mùa theo tên này. Tên mùa tùy ý, chỉ để bạn đọc.",
+      "Từ ngày, Đến ngày: dd/mm/yyyy, tính cả ngày đầu và ngày cuối. Hai mùa của cùng hạng phòng và đối tác không được chồng ngày nhau. Mùa có hai khoảng ngày rời nhau thì viết thành hai dòng.",
+      "Giá net 1 đêm: số nguyên, ví dụ 1200000. Giá net đêm thứ 7: chỉ điền khi đêm thứ 7 có giá khác.",
+      "Điền xong, lưu file rồi vào Cài đặt, Nhập dữ liệu, chọn đối tác mặc định, bấm Tải file dữ liệu lên. Khách sạn đã có bảng giá sẽ bị thay hoàn toàn nên hãy điền đủ mọi hạng phòng và mùa."]),
+    {name:"Đối tác",rows:[["Tên đối tác (đang có trong app)"]].concat(pn.map(n=>[n])),widths:[40]}
+  ];
+  return XR.build(sheets);
+}
+let impPlan=null;
+function downloadImportTemplate(){ downloadXlsx(orderTemplateXlsx(),"serene-mau-nhap-don.xlsx"); }
 function todayVn(){ const n=new Date(); return String(n.getDate()).padStart(2,"0")+"/"+String(n.getMonth()+1).padStart(2,"0")+"/"+n.getFullYear(); }
-function importPick(inp){
+async function importPick(inp){
   const f=inp.files&&inp.files[0]; impPlan=null; $("imp-preview").innerHTML="";
   if(!f) return;
-  if(f.size>2000000){ toast("File quá lớn (tối đa 2 MB)",4000); return; }
-  const rd=new FileReader();
-  rd.onload=()=>{
-    const text=String(rd.result||"");
-    if(text.includes("\uFFFD")){ $("imp-preview").innerHTML='<div class="warn-box">File bị lỗi font tiếng Việt. Trong Excel chọn Lưu thành, loại <b>CSV UTF-8 (Comma delimited)</b>, rồi chọn lại file.</div>'; return; }
-    const r=BK.buildImport(BK.parseCsv(text),{cats:catList,partners,today:todayVn()});
+  let table;
+  try{ table=await readTableFile(f); }catch(e){ $("imp-preview").innerHTML='<div class="warn-box">'+esc(e.message)+'</div>'; return; }
+    const r=BK.buildImport(table,{cats:catList,partners,today:todayVn()});
     if(r.fatal){ $("imp-preview").innerHTML='<div class="warn-box">'+esc(r.fatal)+'</div>'; return; }
     const have=new Set(bookings.map(b=>b.ref).filter(Boolean));
     const dup=r.orders.filter(o=>o.ref&&have.has(o.ref)), fresh=r.orders.filter(o=>!(o.ref&&have.has(o.ref)));
@@ -2395,8 +2450,6 @@ function importPick(inp){
       ${fresh.slice(0,8).map(o=>`<div class="sup-ord"><span>${esc(o.name)} · ${esc(o.created)} · ${BK.ORDER_STATUS_LABELS[o.orderStatus]}</span><span>${VNDn(o.totalAmt)} đ</span></div>`).join("")}${fresh.length>8?`<div style="font-size:12px;color:#7A8FA0">... và ${fresh.length-8} đơn khác</div>`:""}
       ${fresh.length?`<button class="btn-main" style="margin-top:10px" onclick="importRun()"><i class="ti ti-file-import"></i>Nhập ${fresh.length} đơn</button>`:""}
     </div>`;
-  };
-  rd.readAsText(f,"utf-8");
 }
 function importRun(){
   if(!impPlan||!impPlan.orders.length) return;
