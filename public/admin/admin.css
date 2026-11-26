@@ -156,3 +156,9 @@ header .booking-link{margin-left:0}
 .hub-card strong{font-size:18px}
 }
 @media(max-width:380px){header .brand{font-size:18px}header .hub-link,header .booking-link,header .posts-link,header .nav-link{padding:7px 10px;font-size:13px}}
+
+.hub-card{display:grid;grid-template-columns:auto 1fr;grid-template-rows:auto auto;column-gap:16px;row-gap:4px;align-content:center;align-items:center}
+.hub-ico{grid-row:1/3;grid-column:1;width:52px;height:52px;border-radius:14px;background:var(--tint);color:var(--teal);display:grid;place-items:center;font-style:normal;transition:background .15s,color .15s}
+.hub-card:hover .hub-ico{background:var(--teal);color:#fff}
+.hub-card strong{grid-column:2;align-self:end}.hub-card span{grid-column:2;align-self:start}
+@media(max-width:700px){.hub-ico{width:46px;height:46px;border-radius:12px}}
