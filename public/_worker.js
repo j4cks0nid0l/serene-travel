@@ -661,6 +661,8 @@ async function ensureQuickTables(env){
    try{await env.DB.prepare('ALTER TABLE quick_msgs ADD COLUMN sec TEXT NOT NULL DEFAULT \'\'').run();added=true}catch(e){if(!/duplicate column/i.test(String(e&&e.message||e)))throw e}
    if(added)await env.DB.prepare('UPDATE quick_msgs SET sec=grp, grp=\'\' WHERE grp<>\'\'').run();
    await env.DB.prepare('CREATE TABLE IF NOT EXISTS quick_photos (id TEXT PRIMARY KEY, album TEXT NOT NULL, label TEXT NOT NULL DEFAULT \'\', url TEXT NOT NULL, created TEXT NOT NULL)').run();
+   // Ảnh cũng 3 tầng: sec (Mục) > grp (Nhóm) > album (Khách sạn). Ảnh cũ để sec và grp trống, hiện trong "Chưa phân loại".
+   for(const col of ['sec','grp']){try{await env.DB.prepare('ALTER TABLE quick_photos ADD COLUMN '+col+' TEXT NOT NULL DEFAULT \'\'').run()}catch(e){if(!/duplicate column/i.test(String(e&&e.message||e)))throw e}}
   })();
   quickReady.set(env.DB,p);
   p.catch(()=>quickReady.delete(env.DB));
@@ -673,13 +675,13 @@ async function quickApi(req,env,path){
  if(!env.DB)return json({error:'Chưa kết nối cơ sở dữ liệu.'},503);
  await ensureQuickTables(env);
  const now=new Date().toISOString();
- const m=/^\/api\/quick(?:\/(msg|photo|rename|group)(?:\/([A-Za-z0-9]{6,30}))?)?$/.exec(path);
+ const m=/^\/api\/quick(?:\/(msg|photo|rename|group|prename|pgroup)(?:\/([A-Za-z0-9]{6,30}))?)?$/.exec(path);
  if(!m)return json({error:'Không tìm thấy.'},404);
  const kind=m[1],id=m[2];
  if(!kind){
   if(req.method!=='GET')return json({error:'Không hỗ trợ.'},405);
   const msgs=await env.DB.prepare('SELECT id,sec,grp,title,body,updated FROM quick_msgs ORDER BY sec COLLATE NOCASE, grp COLLATE NOCASE, title COLLATE NOCASE LIMIT 600').all();
-  const photos=await env.DB.prepare('SELECT id,album,label,url,created FROM quick_photos ORDER BY album COLLATE NOCASE, created DESC LIMIT 3000').all();
+  const photos=await env.DB.prepare('SELECT id,sec,grp,album,label,url,created FROM quick_photos ORDER BY sec COLLATE NOCASE, grp COLLATE NOCASE, album COLLATE NOCASE, created DESC LIMIT 3000').all();
   return json({msgs:msgs.results,photos:photos.results});
  }
  let data={};
@@ -703,6 +705,32 @@ async function quickApi(req,env,path){
   else return json({error:'Dữ liệu không hợp lệ.'},400);
   return json({ok:true});
  }
+ if(kind==='prename'){
+  if(req.method!=='POST')return json({error:'Không hỗ trợ.'},405);
+  const sec=quickClean(data.sec,40),grp=quickClean(data.grp,40),from=quickClean(data.from,80),to=quickClean(data.to,80);
+  if(!to)return json({error:'Nhập tên mới.'},400);
+  if(data.level==='sec')await env.DB.prepare('UPDATE quick_photos SET sec=? WHERE sec=?').bind(to.slice(0,40),from).run();
+  else if(data.level==='grp')await env.DB.prepare('UPDATE quick_photos SET grp=? WHERE sec=? AND grp=?').bind(to.slice(0,40),sec,from).run();
+  else if(data.level==='album')await env.DB.prepare('UPDATE quick_photos SET album=? WHERE sec=? AND grp=? AND album=?').bind(to,sec,grp,from).run();
+  else return json({error:'Dữ liệu không hợp lệ.'},400);
+  return json({ok:true});
+ }
+ if(kind==='pgroup'){
+  if(req.method!=='POST')return json({error:'Không hỗ trợ.'},405);
+  const sec=quickClean(data.sec,40),grp=quickClean(data.grp,40),album=quickClean(data.album,80);
+  let where,args;
+  if(data.level==='sec'){where='sec=?';args=[sec]}
+  else if(data.level==='grp'){where='sec=? AND grp=?';args=[sec,grp]}
+  else if(data.level==='album'){where='sec=? AND grp=? AND album=?';args=[sec,grp,album]}
+  else return json({error:'Dữ liệu không hợp lệ.'},400);
+  const rows=await env.DB.prepare('SELECT url FROM quick_photos WHERE '+where).bind(...args).all();
+  await env.DB.prepare('DELETE FROM quick_photos WHERE '+where).bind(...args).run();
+  if(env.MEDIA&&env.MEDIA.delete)for(const r of rows.results){
+   const left=await env.DB.prepare('SELECT COUNT(*) n FROM quick_photos WHERE url=?').bind(r.url).first();
+   if(!left.n)try{await env.MEDIA.delete(r.url.slice(7))}catch{}
+  }
+  return json({ok:true,removed:rows.results.length});
+ }
  if(kind==='msg'){
   const sec=quickClean(data.sec,40),grp=quickClean(data.grp,40),title=quickClean(data.title,80),body=quickClean(data.body,4000);
   if((req.method==='POST'||req.method==='PUT')&&!sec)return json({error:'Nhập tên mục.'},400);
@@ -724,7 +752,8 @@ async function quickApi(req,env,path){
   if(req.method==='DELETE'){await env.DB.prepare('DELETE FROM quick_msgs WHERE id=?').bind(id).run();return json({ok:true})}
   return json({error:'Không hỗ trợ.'},405);
  }
- const album=quickClean(data.album,80),label=quickClean(data.label,40);
+ const psec=quickClean(data.sec,40),pgrp=quickClean(data.grp,40),album=quickClean(data.album,80),label=quickClean(data.label,40);
+ if((req.method==='POST'||req.method==='PUT')&&!psec)return json({error:'Nhập tên mục.'},400);
  if(req.method==='POST'){
   if(!album)return json({error:'Chọn hoặc nhập tên khách sạn.'},400);
   const url=String(data.url||'');
@@ -732,13 +761,13 @@ async function quickApi(req,env,path){
   const c=await env.DB.prepare('SELECT COUNT(*) n FROM quick_photos').first();
   if(c.n>=3000)return json({error:'Đã đủ 3000 ảnh, hãy xóa bớt ảnh cũ.'},400);
   const nid=newId();
-  await env.DB.prepare('INSERT INTO quick_photos (id,album,label,url,created) VALUES (?,?,?,?,?)').bind(nid,album,label,url,now).run();
-  return json({photo:{id:nid,album,label,url,created:now}},201);
+  await env.DB.prepare('INSERT INTO quick_photos (id,sec,grp,album,label,url,created) VALUES (?,?,?,?,?,?,?)').bind(nid,psec,pgrp,album,label,url,now).run();
+  return json({photo:{id:nid,sec:psec,grp:pgrp,album,label,url,created:now}},201);
  }
  if(!id)return json({error:'Thiếu mã ảnh.'},400);
  if(req.method==='PUT'){
   if(!album)return json({error:'Nhập tên khách sạn.'},400);
-  const r=await env.DB.prepare('UPDATE quick_photos SET album=?,label=? WHERE id=?').bind(album,label,id).run();
+  const r=await env.DB.prepare('UPDATE quick_photos SET sec=?,grp=?,album=?,label=? WHERE id=?').bind(psec,pgrp,album,label,id).run();
   if(!r.meta.changes)return json({error:'Không tìm thấy ảnh.'},404);
   return json({ok:true});
  }

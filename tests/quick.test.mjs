@@ -30,11 +30,11 @@ test('Copy nhanh: tin nhắn mẫu thêm, sửa, xóa',async()=>{
 test('Copy nhanh: ảnh khách sạn, tải lên, đổi album, xóa kèm file',async()=>{
  const env=await runtime({passwordHash:hash});const o=client(env);await o.login('serenetravelvn@gmail.com',pass);
  const up=await o.j('/api/upload','POST',png,'image/png');assert.equal(up.status,200);
- assert.equal((await o.j('/api/quick/photo','POST',{album:'',url:up.body.url})).status,400);
- assert.equal((await o.j('/api/quick/photo','POST',{album:'Vinpearl',url:'https://evil.com/a.png'})).status,400);
- const p=await o.j('/api/quick/photo','POST',{album:'Vinpearl',label:'Hồ bơi',url:up.body.url});assert.equal(p.status,201);
+ assert.equal((await o.j('/api/quick/photo','POST',{sec:'M',album:'',url:up.body.url})).status,400);
+ assert.equal((await o.j('/api/quick/photo','POST',{sec:'M',album:'Vinpearl',url:'https://evil.com/a.png'})).status,400);
+ const p=await o.j('/api/quick/photo','POST',{sec:'Vinpearl 2N1Đ',grp:'Vin Đảo',album:'Vinpearl',label:'Hồ bơi',url:up.body.url});assert.equal(p.status,201);
  assert.equal((await o.call(up.body.url)).status,200);
- assert.equal((await o.j('/api/quick/photo/'+p.body.photo.id,'PUT',{album:'Vinpearl Luxury',label:'Phòng'})).status,200);
+ assert.equal((await o.j('/api/quick/photo/'+p.body.photo.id,'PUT',{sec:'Vinpearl 2N1Đ',grp:'Vin Đảo',album:'Vinpearl Luxury',label:'Phòng'})).status,200);
  assert.equal((await o.j('/api/quick')).body.photos[0].album,'Vinpearl Luxury');
  assert.equal((await o.j('/api/quick/photo/'+p.body.photo.id,'DELETE')).status,200);
  assert.equal((await o.call(up.body.url)).status,404,'file ảnh bị xóa khỏi kho');
@@ -76,4 +76,28 @@ test('Copy nhanh: bảng cũ chỉ có nhóm thì chuyển nhóm cũ thành Mụ
  const o=client(env);await o.login('serenetravelvn@gmail.com',pass);
  const m=(await o.j('/api/quick')).body.msgs;assert.equal(m[0].sec,'Báo giá');assert.equal(m[0].grp,'');
  const again=(await o.j('/api/quick')).body.msgs;assert.equal(again[0].sec,'Báo giá');
+});
+test('Copy nhanh: ảnh 3 tầng Mục > Nhóm > Khách sạn, đổi tên, xóa cả thư mục kèm file',async()=>{
+ const env=await runtime({passwordHash:hash});const o=client(env);await o.login('serenetravelvn@gmail.com',pass);
+ const up=async()=>(await o.j('/api/upload','POST',png,'image/png')).body.url;
+ const add=async(sec,grp,album)=>{const url=await up();const r=await o.j('/api/quick/photo','POST',{sec,grp,album,label:'x',url});assert.equal(r.status,201);return url};
+ assert.equal((await o.j('/api/quick/photo','POST',{sec:'',album:'a',url:await up()})).status,400,'bắt buộc có mục');
+ const u1=await add('Vinpearl 2N1Đ','Vin Đảo','KS A'),u2=await add('Vinpearl 2N1Đ','Vin Đảo','KS B'),u3=await add('Vinpearl 2N1Đ','','KS C');
+ assert.equal((await o.j('/api/quick/prename','POST',{level:'album',sec:'Vinpearl 2N1Đ',grp:'Vin Đảo',from:'KS A',to:'KS A mới'})).status,200);
+ assert.equal((await o.j('/api/quick/prename','POST',{level:'grp',sec:'Vinpearl 2N1Đ',from:'Vin Đảo',to:'Hòn Tre'})).status,200);
+ assert.equal((await o.j('/api/quick/prename','POST',{level:'sec',from:'Vinpearl 2N1Đ',to:'Vin 2N1Đ'})).status,200);
+ let ph=(await o.j('/api/quick')).body.photos;assert.equal(ph.filter(x=>x.sec==='Vin 2N1Đ'&&x.grp==='Hòn Tre'&&x.album==='KS A mới').length,1);
+ assert.equal((await o.j('/api/quick/pgroup','POST',{level:'album',sec:'Vin 2N1Đ',grp:'Hòn Tre',album:'KS A mới'})).status,200);
+ assert.equal((await o.call(u1)).status,404);assert.equal((await o.call(u2)).status,200);
+ assert.equal((await o.j('/api/quick/pgroup','POST',{level:'sec',sec:'Vin 2N1Đ'})).status,200);
+ assert.equal((await o.call(u2)).status,404);assert.equal((await o.call(u3)).status,404);
+ assert.equal((await o.j('/api/quick')).body.photos.length,0);
+});
+test('Copy nhanh: ảnh cũ chưa có mục vẫn đọc được, nằm ở mục trống',async()=>{
+ const env=await runtime({passwordHash:hash});
+ await env.DB.prepare("CREATE TABLE quick_photos (id TEXT PRIMARY KEY, album TEXT NOT NULL, label TEXT NOT NULL DEFAULT '', url TEXT NOT NULL, created TEXT NOT NULL)").run();
+ await env.DB.prepare("INSERT INTO quick_photos VALUES ('Qphoto00001','Vinpearl','Hồ bơi','/media/a.png','t')").run();
+ const o=client(env);await o.login('serenetravelvn@gmail.com',pass);
+ const p=(await o.j('/api/quick')).body.photos[0];assert.equal(p.album,'Vinpearl');assert.equal(p.sec,'');assert.equal(p.grp,'');
+ assert.equal((await o.j('/api/quick/photo/Qphoto00001','PUT',{sec:'Vinpearl 2N1Đ',grp:'',album:'Vinpearl',label:'Hồ bơi'})).status,200);
 });
