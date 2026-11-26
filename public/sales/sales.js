@@ -82,14 +82,6 @@
     catch(e){msg('m-verify',e.message)}
   });
 
-  guard($('f-pass'),async function(){
-    msg('m-pass','');
-    try{
-      await api('POST','password',{current:$('p-cur').value,next:$('p-new').value});
-      $('p-cur').value='';$('p-new').value='';msg('m-pass','Đã đổi mật khẩu.',true);
-    }catch(e){msg('m-pass',e.message)}
-  });
-
   $('btn-logout').addEventListener('click',async function(){
     try{await api('POST','logout',{})}catch(e){}
     csrf='';show('login');
