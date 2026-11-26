@@ -9,6 +9,7 @@
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/tabler-icons.min.css" rel="stylesheet">
 <script src="/vendor/html2canvas.min.js"></script>
 <script src="/admin/booking/calc.js"></script>
+<script src="/admin/booking/rates.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#F0F4F8;min-height:100vh;font-family:"Be Vietnam Pro",sans-serif;color:#2C3E50;font-size:14px}
@@ -290,6 +291,12 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
 .sup-per{border:.5px solid rgba(58,125,153,.2);border-radius:9px;padding:9px 10px;margin-top:8px}
 .sup-top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
 .sup-ord{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:#5B7285;padding:3px 0}
+.rt-box{border:.5px solid rgba(58,125,153,.28);background:#F4F9FB;border-radius:10px;padding:9px 11px;margin:0 0 10px;font-size:12.5px}
+.rt-h{font-weight:600;margin-bottom:6px}.rt-s{font-weight:400;font-size:11px;color:#7A8FA0}
+.rt-opt{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 8px;border-radius:8px;background:#fff;border:.5px solid rgba(58,125,153,.18);margin-top:6px}
+.rt-opt.rt-best{border-color:#3A7D99;background:#EAF4F8}.rt-r{display:flex;align-items:center;gap:8px;white-space:nowrap}.rt-r .btn-outline{padding:5px 10px;width:auto}
+.rt-detail .sup-ord{gap:8px;align-items:center}.rt-item{cursor:pointer;display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:6px}
+.rt-bad{color:#B85C5C}
 .warn-box{background:#FFF1F1;border:.5px solid rgba(184,92,92,.35);color:#9B4040;border-radius:9px;padding:9px 11px;font-size:12.5px;margin-bottom:10px}
 </style>
 </head>
@@ -311,6 +318,7 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
       <button class="sb-sub-item" data-sub="units" onclick="go('settings','units')">Đơn vị tính</button>
       <button class="sb-sub-item" data-sub="partners" onclick="go('settings','partners')">Đối tác</button>
       <button class="sb-sub-item" data-sub="hotels" onclick="go('settings','hotels')">Thông tin khách sạn</button>
+      <button class="sb-sub-item" data-sub="rates" onclick="go('settings','rates')">Bảng giá net</button>
       <button class="sb-sub-item" data-sub="note" onclick="go('settings','note')">Ghi chú cuối phiếu</button>
       <button class="sb-sub-item" data-sub="data" onclick="go('settings','data')">Dữ liệu</button>
     </div>
@@ -487,6 +495,28 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
       <button class="btn-outline" style="width:100%" onclick="hotelAdd()"><i class="ti ti-plus"></i>Thêm</button>
     </div>
     <div style="font-size:11px;color:#7A8FA0;margin-top:6px">Nhập một lần, khi gửi Booking code cho khách app tự điền địa chỉ và số điện thoại. App nhận ra khách sạn khi tên dịch vụ trong đơn bắt đầu bằng tên khách sạn ở đây.</div>
+  </div>
+  <div class="card set-page" data-page="rates">
+    <div class="sec-title"><i class="ti ti-currency-dong"></i>Bảng giá net khách sạn</div>
+    <div style="font-size:12.5px;color:#5B7285;line-height:1.5;margin-bottom:10px">Giá net là giá bạn mua, tính theo đêm. Khi tạo đơn, gõ tên dịch vụ dạng <b>Tên khách sạn - Hạng phòng</b>, chọn ngày nhận và trả phòng, app tự tính tổng net qua các mùa và gợi ý đối tác rẻ nhất. Giá bán bạn vẫn tự nhập.</div>
+    <input id="rt-search" placeholder="Tìm khách sạn" oninput="renderRates()" style="margin-bottom:8px">
+    <div id="rt-list"></div>
+    <div id="rt-detail" class="rt-detail"></div>
+    <div style="margin-top:16px;padding-top:14px;border-top:.5px dashed rgba(58,125,153,.25)">
+      <div class="sec-title"><i class="ti ti-file-import"></i>Nhập bảng giá từ file</div>
+      <div style="font-size:12.5px;color:#5B7285;line-height:1.5;margin-bottom:10px">
+        1. Tải file mẫu, mở bằng Excel hoặc Google Sheets. Mỗi dòng là một hạng phòng trong một khoảng ngày.<br>
+        2. Địa chỉ, hotline, ghi chú chỉ cần điền ở dòng đầu của mỗi khách sạn. Cột Đối tác để trống thì dùng đối tác chọn ở dưới.<br>
+        3. Lưu thành <b>CSV UTF-8</b>, chọn file, xem trước rồi bấm Nhập.<br>
+        Khách sạn nào đã có bảng giá sẽ được <b>thay hoàn toàn</b> bằng dữ liệu trong file.
+      </div>
+      <button class="btn-outline" style="width:100%;margin-bottom:8px" onclick="rtDownloadTemplate()"><i class="ti ti-download"></i>Tải file mẫu bảng giá</button>
+      <button class="btn-outline" style="width:100%;margin-bottom:8px" onclick="rtExportAll()"><i class="ti ti-file-spreadsheet"></i>Tải toàn bộ bảng giá hiện có (CSV)</button>
+      <label>Đối tác cho các dòng để trống cột Đối tác</label>
+      <select id="rt-defp" style="margin-bottom:8px"></select>
+      <input type="file" id="rt-file" accept=".csv,text/csv,.txt" onchange="rtPick(this)" style="width:100%;margin-bottom:8px">
+      <div id="rt-preview"></div>
+    </div>
   </div>
   <div class="card set-page" data-page="note">
     <div class="sec-title"><i class="ti ti-note"></i>Ghi chú cuối phiếu</div>
@@ -736,6 +766,7 @@ function updateNightsBadge(i,nights) {
 function updateNights(i){
   const w=svcEl(i); if(!w||w.dataset.mode!=="range") return;
   updateNightsBadge(i, BK.nightsBetween($("sd-"+i)?$("sd-"+i).value:"", $("se-"+i)?$("se-"+i).value:""));
+  rateHint(i);
 }
 function tripChanged(i){
   const box=$("seb-"+i), round=$("st-"+i).value==="round";
@@ -921,7 +952,7 @@ async function loadSettings(){
     catList=BK.normalizeCats(st.categories);
     unitHide=st.unitHide&&typeof st.unitHide==="object"?st.unitHide:{};
     partners=BK.normalizePartners(st.partners);
-    hotels=Array.isArray(st.hotels)?st.hotels:[]; renderHotels();
+    hotels=Array.isArray(st.hotels)?st.hotels:[]; renderHotels(); loadRateList();
     ccInternal=BK.parseEmails((st.ccInternal||[]).join(","))||[];
     const ci=$("set-cc-internal"); if(ci) ci.value=ccInternal.join(", ");
     refreshAllChips(); refreshUnitSelects(); refreshAllPartners();
@@ -1006,7 +1037,7 @@ async function toggleUnitCat(cb){
   else { unitHide=JSON.parse(before); renderUnitList(); }
 }
 function renderSettings(){
-  renderCatList(); renderUnitList(); renderPartnerList(); renderNewPartnerCats();
+  renderCatList(); renderUnitList(); renderPartnerList(); renderNewPartnerCats(); renderRates();
   const ta=$("set-slip-note"); if(ta&&document.activeElement!==ta) ta.value=slipNote;
 }
 async function saveSlipNote(){
@@ -1230,7 +1261,7 @@ function renderBody(i, cat, vals){
     <div class="svc-date-row">${dateBoxHtml(i,"sd","Ngày đi",vals.dateIn)}<div id="seb-${i}"${round?"":' style="display:none"'}>${dateBoxHtml(i,"se","Ngày về",vals.dateOut)}</div></div>`;
   }
   const partnerHtml=`<div style="margin-bottom:8px"><label>Đối tác</label><select id="spa-${i}" data-pcat="${v(cat.id)}" data-prev="${v(vals.partnerId)}" onchange="partnerChanged(${i},this)">${partnerOpts(cat.id,vals.partnerId,vals.partner)}</select></div><div id="spq-${i}"></div>`;
-  const nameHtml=`<div style="margin-bottom:8px"><label>Tên dịch vụ</label><input id="sn-${i}" list="dl-${i}" autocomplete="off" placeholder="VD: Phòng Deluxe Sea View" value="${v(vals.name)}"><datalist id="dl-${i}"></datalist></div>`
+  const nameHtml=`<div style="margin-bottom:8px"><label>Tên dịch vụ</label><input id="sn-${i}" list="dl-${i}" autocomplete="off" placeholder="VD: Phòng Deluxe Sea View" value="${v(vals.name)}" oninput="rateHint(${i})"><datalist id="dl-${i}"></datalist></div>`
     +`<div style="margin-bottom:8px"><label>Ghi chú <span style="font-weight:400;color:#A8BFCC">(hiện trên phiếu và tin Zalo của khách, không bắt buộc)</span></label><textarea id="snote-${i}" rows="2" maxlength="300" style="min-height:52px" placeholder="VD: Nhận phòng sau 14:00">${v(vals.note)}</textarea></div>`;
   let body="";
   if(people==="none"){
@@ -1255,7 +1286,7 @@ function renderBody(i, cat, vals){
     + `<div class="net-row" style="grid-template-columns:1fr"><div class="net-input-wrap" style="justify-content:flex-end"><span class="net-lbl">📊 Lợi nhuận dịch vụ</span><div class="profit-bar" id="spro-${i}"></div></div></div>
        <div id="snt-${i}" style="font-size:11px;color:#7A8FA0;margin:2px 0 6px"></div>`;
   }
-  $("sb-"+i).innerHTML=partnerHtml+dates+nameHtml+body;
+  $("sb-"+i).innerHTML=partnerHtml+dates+nameHtml+(mode==="range"&&people==="none"?`<div id="rtq-${i}"></div>`:"")+body;
   refreshSvcList(i);
   if(mode==="range") updateNights(i);
 }
@@ -2136,6 +2167,207 @@ async function delBooking(id){
 }
 
 // ── Nhập nhiều đơn từ file CSV ──
+// ── Bảng giá net khách sạn ──
+let rateList=[], rateCache={}, rateTok={}, rateRoomPick={}, rateOpts={}, rateOpen=null, rtPlan=null;
+const todayIso=()=>{ const n=new Date(); return n.getFullYear()+"-"+String(n.getMonth()+1).padStart(2,"0")+"-"+String(n.getDate()).padStart(2,"0"); };
+const dIso=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+function ratePartnerName(id){ if(!id||id==="_none") return "Chưa gán đối tác"; const p=BK.findPartner(partners,id); return p?p.name:"(đối tác đã xóa)"; }
+async function loadRateList(){
+  try{ const d=await apiBooking("GET",undefined,"/api/hotel-rates"); rateList=Array.isArray(d.list)?d.list:[]; }catch(e){ rateList=[]; }
+  renderRates();
+}
+function findRateHotel(svcName){
+  const seg=hkey(String(svcName||"").split(" - ")[0]); if(seg.length<3) return null;
+  let best=null;
+  rateList.forEach(h=>{ const k=hkey(h.name); if(k&&(seg===k||(seg.length>=4&&(seg.includes(k)||k.includes(seg))))&&(!best||k.length>hkey(best.name).length)) best=h; });
+  return best;
+}
+async function rateLoad(name){
+  const k=hkey(name); if(rateCache[k]) return rateCache[k];
+  try{ const d=await apiBooking("GET",undefined,"/api/hotel-rates?hotel="+encodeURIComponent(name)); if(d.rates){ rateCache[k]=d.rates; return d.rates; } }catch(e){}
+  return null;
+}
+async function rateSaveRec(rec,okMsg){
+  try{ await apiBooking("PUT",{items:[{name:rec.name,note:rec.note||"",updated:todayVn(),rows:rec.rows}]},"/api/hotel-rates"); }
+  catch(e){ toast("Chưa lưu được bảng giá: "+e.message,5000); return false; }
+  rec.updated=todayVn(); rateCache[hkey(rec.name)]=rec;
+  const sum={name:rec.name,updated:rec.updated,rows:rec.rows.length,last:rec.rows.reduce((m,x)=>x.to>m?x.to:m,""),note:!!rec.note};
+  const at=rateList.findIndex(h=>hkey(h.name)===hkey(rec.name)); if(at>=0) rateList[at]=sum; else rateList.push(sum);
+  if(okMsg) toast(okMsg);
+  return true;
+}
+function renderRates(){
+  const box=$("rt-list"); if(!box) return;
+  const sel=$("rt-defp");
+  if(sel){ const cur=sel.value; sel.innerHTML='<option value="">Không gán đối tác</option>'+partners.map(p=>`<option value="${escAttr(p.id)}">${esc(p.name)}</option>`).join(""); sel.value=cur; }
+  const q=hkey($("rt-search")?$("rt-search").value:""), today=todayIso();
+  if(!rateList.length){ box.innerHTML='<div class="no-pay">Chưa có bảng giá nào. Nhập từ file ở bên dưới.</div>'; $("rt-detail").innerHTML=""; return; }
+  const list=rateList.filter(h=>!q||hkey(h.name).includes(q)).sort((a,b)=>a.name.localeCompare(b.name,"vi"));
+  box.innerHTML=`<div class="rt-s" style="margin-bottom:6px">${rateList.length} khách sạn có bảng giá${list.length>40?`. Đang hiện 40 đầu tiên, gõ tên để lọc`:""}</div>`
+   +list.slice(0,40).map(h=>`<div class="cat-item rt-item" data-n="${escAttr(h.name)}" onclick="rateOpenHotel(this.dataset.n)"><div><b>${esc(h.name)}</b><div class="rt-s">${h.rows} dòng giá${h.updated?" · cập nhật "+esc(h.updated):""}${h.note?" · có ghi chú":""}</div></div>${h.last&&h.last<today?'<span class="rt-s rt-bad">Hết hạn '+esc(RT.dmy(h.last))+'</span>':'<span class="rt-s">đến '+esc(RT.dmy(h.last))+'</span>'}</div>`).join("");
+}
+async function rateOpenHotel(name){
+  const rec=await rateLoad(name); if(!rec){ toast("Không mở được bảng giá",4000); return; }
+  rateOpen=rec; renderRateDetail();
+  const el=$("rt-detail"); if(el) el.scrollIntoView({behavior:"smooth",block:"nearest"});
+}
+function renderRateDetail(){
+  const el=$("rt-detail"), rec=rateOpen; if(!el) return;
+  if(!rec){ el.innerHTML=""; return; }
+  const today=todayIso(), rooms=RT.roomsOf(rec.rows);
+  const grp=rooms.map(rm=>{
+    const k=RT.key(rm), items=rec.rows.map((r,idx)=>({r,idx})).filter(x=>RT.key(x.r.room)===k).sort((a,b)=>a.r.from<b.r.from?-1:1);
+    return `<div style="margin-top:8px"><div style="font-weight:600;font-size:13px">${esc(rm)}</div>`+items.map(x=>`<div class="sup-ord"><span>${esc(ratePartnerName(x.r.p))} · ${esc(x.r.label||"")} · ${esc(RT.dmy(x.r.from))} đến ${esc(RT.dmy(x.r.to))}${x.r.to<today?' <span class="rt-bad">(hết hạn)</span>':""}</span><span style="white-space:nowrap;display:flex;align-items:center;gap:8px"><b>${VNDn(x.r.net)} đ</b>${x.r.sat!=null?'<span class="rt-s">T7 '+VNDn(x.r.sat)+' đ</span>':""}<button class="btn-outline btn-danger" style="width:auto;padding:2px 9px;font-size:11px" onclick="rateDelRow(${x.idx})" aria-label="Xóa dòng">Xóa</button></span></div>`).join("")+"</div>";
+  }).join("");
+  el.innerHTML=`<div class="card" style="margin:12px 0 0;padding:12px">
+    <div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><div style="font-weight:700">${esc(rec.name)}</div><button class="btn-outline" style="width:auto;padding:5px 10px" onclick="rateOpen=null;renderRateDetail()">Đóng</button></div>
+    <label style="margin-top:8px">Ghi chú chính sách (hiện khi tạo đơn)</label>
+    <textarea id="rt-note" rows="4" maxlength="2000" style="min-height:70px">${esc(rec.note||"")}</textarea>
+    <button class="btn-outline" style="width:100%;margin-top:6px" onclick="rateSaveNote()"><i class="ti ti-device-floppy"></i>Lưu ghi chú</button>
+    ${grp||'<div class="no-pay">Chưa có dòng giá.</div>'}
+    <div style="margin-top:12px;padding-top:10px;border-top:.5px dashed rgba(58,125,153,.25)">
+      <label>Thêm một dòng giá</label>
+      <select id="rt-a-p" style="margin-bottom:6px"><option value="">Chưa gán đối tác</option>${partners.map(p=>`<option value="${escAttr(p.id)}">${esc(p.name)}</option>`).join("")}</select>
+      <input id="rt-a-room" list="rt-a-rooms" maxlength="120" placeholder="Hạng phòng" style="margin-bottom:6px"><datalist id="rt-a-rooms">${rooms.map(r=>`<option value="${escAttr(r)}">`).join("")}</datalist>
+      <input id="rt-a-label" maxlength="60" placeholder="Tên mùa (VD: Cao điểm), có thể để trống" style="margin-bottom:6px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px"><input id="rt-a-from" placeholder="Từ ngày dd/mm/yyyy" maxlength="10"><input id="rt-a-to" placeholder="Đến ngày dd/mm/yyyy" maxlength="10"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px"><input id="rt-a-net" inputmode="numeric" placeholder="Giá net 1 đêm" oninput="this.value=fmtInput(this.value)"><input id="rt-a-sat" inputmode="numeric" placeholder="Giá đêm thứ 7 (nếu khác)" oninput="this.value=fmtInput(this.value)"></div>
+      <button class="btn-outline" style="width:100%" onclick="rateAddRow()"><i class="ti ti-plus"></i>Thêm dòng giá</button>
+    </div>
+    <button class="btn-outline btn-danger" style="width:100%;margin-top:12px" onclick="rateDelHotel()"><i class="ti ti-trash"></i>Xóa toàn bộ giá của khách sạn này</button>
+  </div>`;
+}
+async function rateSaveNote(){
+  if(!rateOpen) return;
+  const v=$("rt-note").value.trim();
+  if(v.length>2000||/[<>]/.test(v)){ toast("Ghi chú tối đa 2000 ký tự và không dùng < >",4000); return; }
+  const rec={...rateOpen,note:v};
+  if(await rateSaveRec(rec,"Đã lưu ghi chú")){ rateOpen=rec; renderRates(); renderRateDetail(); }
+}
+async function rateAddRow(){
+  if(!rateOpen) return;
+  const row={p:$("rt-a-p").value,room:$("rt-a-room").value,label:$("rt-a-label").value,from:RT.parseDmy($("rt-a-from").value),to:RT.parseDmy($("rt-a-to").value),net:parseNum($("rt-a-net").value),sat:parseNum($("rt-a-sat").value)||null};
+  if(!row.from||!row.to){ toast("Ngày phải đúng dạng dd/mm/yyyy",4000); return; }
+  if(row.from>row.to){ toast("Ngày bắt đầu phải trước ngày kết thúc",4000); return; }
+  const ok=RT.cleanRows([row]); if(!ok){ toast("Kiểm tra lại hạng phòng và giá net (không dùng < >)",4000); return; }
+  const rec={...rateOpen,rows:[...rateOpen.rows,ok[0]]};
+  if(await rateSaveRec(rec,"Đã thêm dòng giá")){ rateOpen=rec; renderRates(); renderRateDetail(); }
+}
+async function rateDelRow(idx){
+  if(!rateOpen||!rateOpen.rows[idx]) return;
+  const rec={...rateOpen,rows:rateOpen.rows.filter((_,j)=>j!==idx)};
+  if(await rateSaveRec(rec,"Đã xóa dòng giá")){ rateOpen=rec; renderRates(); renderRateDetail(); }
+}
+function rateDelHotel(){
+  if(!rateOpen) return;
+  const name=rateOpen.name;
+  askConfirm(`Xóa toàn bộ bảng giá của <b>${esc(name)}</b>?<div class="pay-modal-sub">Các đơn đã tạo không bị ảnh hưởng. Không hoàn tác được.</div>`,async()=>{
+    try{ await apiBooking("DELETE",undefined,"/api/hotel-rates?hotel="+encodeURIComponent(name)); }catch(e){ toast("Chưa xóa được: "+e.message,5000); return; }
+    delete rateCache[hkey(name)]; rateList=rateList.filter(h=>hkey(h.name)!==hkey(name)); rateOpen=null; renderRates(); renderRateDetail(); toast("Đã xóa bảng giá");
+  });
+}
+function rtDownload(text,file){
+  const blob=new Blob([text],{type:"text/csv;charset=utf-8"}), a=document.createElement("a");
+  a.href=URL.createObjectURL(blob); a.download=file; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+}
+function rtDownloadTemplate(){ rtDownload(RT.templateCsv(),"serene-mau-bang-gia.csv"); }
+async function rtExportAll(){
+  if(!rateList.length){ toast("Chưa có bảng giá để tải",3000); return; }
+  toast("Đang tải bảng giá...",2000);
+  const recs=[];
+  for(const h of rateList){ const r=await rateLoad(h.name); if(r) recs.push({...r,address:(hotels.find(x=>hkey(x.name)===hkey(h.name))||{}).address||"",phone:(hotels.find(x=>hkey(x.name)===hkey(h.name))||{}).phone||""}); }
+  rtDownload(RT.toCsv(RT.exportRows(recs,partners)),"serene-bang-gia-hien-co.csv");
+}
+function rtPick(inp){
+  const f=inp.files&&inp.files[0]; rtPlan=null; $("rt-preview").innerHTML="";
+  if(!f) return;
+  if(f.size>5000000){ toast("File quá lớn (tối đa 5 MB)",4000); return; }
+  const rd=new FileReader();
+  rd.onload=()=>{
+    const text=String(rd.result||"");
+    if(text.includes("�")){ $("rt-preview").innerHTML='<div class="warn-box">File bị lỗi font tiếng Việt. Trong Excel chọn Lưu thành, loại <b>CSV UTF-8 (Comma delimited)</b>, rồi chọn lại file.</div>'; return; }
+    const r=RT.buildRates(BK.parseCsv(text),{partners,defaultPartner:$("rt-defp").value});
+    if(r.fatal){ $("rt-preview").innerHTML='<div class="warn-box">'+esc(r.fatal)+'</div>'; return; }
+    const have=new Set(rateList.map(h=>hkey(h.name))), replace=r.items.filter(h=>have.has(hkey(h.name))).length;
+    const rows=r.items.reduce((a,h)=>a+h.rows.length,0), today=todayIso();
+    const old=r.items.filter(h=>h.rows.length&&h.rows.every(x=>x.to<today)).length;
+    rtPlan={items:r.items};
+    $("rt-preview").innerHTML=`<div class="card" style="margin:0 0 8px;padding:10px 12px">
+      <div style="font-size:13px"><b>${r.items.length}</b> khách sạn, <b>${rows}</b> dòng giá${replace?` · <b>${replace}</b> khách sạn đã có bảng giá và sẽ bị thay thế`:""}${old?` · <b>${old}</b> khách sạn chỉ có giá đã hết hạn (vẫn nhập, sẽ có nhãn hết hạn)`:""}</div>
+      ${r.errors.length?`<div class="warn-box" style="margin-top:8px"><b>${r.errors.length} dòng có lỗi, sẽ bị bỏ qua.</b><br>${r.errors.slice(0,10).map(e=>(e.line?"Dòng "+e.line+": ":"")+esc(e.msg)).join("<br>")}${r.errors.length>10?"<br>...":""}</div>`:""}
+      ${r.items.slice(0,8).map(h=>`<div class="sup-ord"><span>${esc(h.name)}</span><span>${h.rows.length} dòng</span></div>`).join("")}${r.items.length>8?`<div class="rt-s">và ${r.items.length-8} khách sạn nữa</div>`:""}
+      ${r.items.length?`<button class="btn-main" style="margin-top:10px" onclick="rtRun()"><i class="ti ti-file-import"></i>Nhập ${r.items.length} khách sạn</button>`:""}
+    </div>`;
+  };
+  rd.readAsText(f,"utf-8");
+}
+function rtRun(){
+  if(!rtPlan||!rtPlan.items.length) return;
+  const items=rtPlan.items;
+  askConfirm(`Nhập bảng giá của <b>${items.length}</b> khách sạn?<div class="pay-modal-sub">Khách sạn đã có bảng giá sẽ bị thay hoàn toàn bằng dữ liệu trong file.</div>`,async()=>{
+    rtPlan=null; const box=$("rt-preview"); let ok=0, fail=0, batch=[], rowsIn=0;
+    const flush=async()=>{
+      if(!batch.length) return;
+      box.innerHTML=`<div style="font-size:13px">Đang lưu ${ok+fail+batch.length} / ${items.length}...</div>`;
+      try{ await apiBooking("PUT",{items:batch.map(h=>({name:h.name,note:h.note||"",updated:todayVn(),rows:h.rows}))},"/api/hotel-rates"); ok+=batch.length; }
+      catch(e){ fail+=batch.length; console.error(e); box.dataset.err=e.message; }
+      batch=[]; rowsIn=0;
+    };
+    for(const h of items){ if(batch.length>=10||rowsIn+h.rows.length>1500) await flush(); batch.push(h); rowsIn+=h.rows.length; }
+    await flush();
+    // Bổ sung địa chỉ, SĐT vào danh sách khách sạn (không ghi đè cái đã có)
+    const next=[...hotels]; let added=0;
+    items.forEach(h=>{ const i=next.findIndex(x=>hkey(x.name)===hkey(h.name)); if(i<0){ if(next.length<500){ next.push({name:h.name,address:(h.address||"").slice(0,200),phone:(h.phone||"").slice(0,80)}); added++; } } else if(!next[i].address&&h.address||!next[i].phone&&h.phone){ next[i]={...next[i],address:next[i].address||(h.address||"").slice(0,200),phone:next[i].phone||(h.phone||"").slice(0,80)}; } });
+    if(JSON.stringify(next)!==JSON.stringify(hotels)&&await saveSetting({hotels:next})){ hotels=next; renderHotels(); }
+    rateCache={}; await loadRateList();
+    box.innerHTML=`<div class="card" style="margin:0 0 8px;padding:10px 12px"><div style="font-size:13px">Đã nhập <b>${ok}</b> khách sạn${added?`, thêm ${added} khách sạn mới vào danh sách thông tin`:""}.${fail?` <span class="rt-bad">${fail} khách sạn chưa lưu được${box.dataset.err?": "+esc(box.dataset.err):""}. Chọn lại file và nhập lại.</span>`:""}</div></div>`;
+    $("rt-file").value="";
+  });
+}
+
+// Gợi ý giá net khi tạo đơn
+function ratePickRoom(i,v){ rateRoomPick[i]=v; rateHint(i); }
+async function rateHint(i){
+  const box=$("rtq-"+i); if(!box) return;
+  const tok=(rateTok[i]=(rateTok[i]||0)+1), w=svcEl(i);
+  if(!w||w.dataset.mode!=="range"||w.dataset.people!=="none"||!rateList.length){ box.innerHTML=""; return; }
+  const nm=$("sn-"+i)?$("sn-"+i).value:"", h=findRateHotel(nm);
+  if(!h){ box.innerHTML=""; return; }
+  const rec=await rateLoad(h.name);
+  if(tok!==rateTok[i]||!$("rtq-"+i)) return;
+  if(!rec||!rec.rows.length){ box.innerHTML=""; return; }
+  const roomQ=String(nm).split(" - ").slice(1).join(" - "), rooms=RT.roomsOf(rec.rows);
+  const room=(rateRoomPick[i]&&rooms.includes(rateRoomPick[i]))?rateRoomPick[i]:RT.matchRoom(rec.rows,roomQ);
+  const d1=BK.parseDate6($("sd-"+i)?$("sd-"+i).value:""), d2=BK.parseDate6($("se-"+i)?$("se-"+i).value:"");
+  const last=rec.rows.reduce((m,x)=>x.to>m?x.to:m,"");
+  let html=`<div class="rt-box"><div class="rt-h">💰 Giá net: ${esc(rec.name)}${rec.updated?` <span class="rt-s">cập nhật ${esc(rec.updated)}</span>`:""}</div>
+    <select onchange="ratePickRoom(${i},this.value)" style="margin-bottom:4px"><option value="">${room?"Đổi hạng phòng":"Chọn hạng phòng để xem giá"}</option>${rooms.map(r=>`<option value="${escAttr(r)}"${r===room?" selected":""}>${esc(r)}</option>`).join("")}</select>`;
+  rateOpts[i]=[];
+  if(room&&d1&&d2&&d2>d1){
+    const s=RT.suggest(rec.rows,room,dIso(d1),dIso(d2)); rateOpts[i]=s.options;
+    if(!s.options.length) html+='<div class="rt-s">Hạng phòng này chưa có giá.</div>';
+    html+=s.options.map((o,idx)=>{
+      const best=s.best&&s.best.p===o.p;
+      return `<div class="rt-opt${best?" rt-best":""}"><div><b>${esc(ratePartnerName(o.p))}</b>${best?" · Rẻ nhất":""}<div class="rt-s">${o.missing?`<span class="rt-bad">Thiếu giá ${o.missing}/${o.nights} đêm, không dùng được</span>`:`${VNDn(o.avg)} đ/đêm${o.exactAvg?"":" (trung bình)"}`}</div></div><div class="rt-r"><b>${VNDn(o.total)} đ</b>${o.missing?"":`<button class="btn-outline" onclick="rateUse(${i},${idx})">Dùng</button>`}</div></div>`;
+    }).join("");
+    if(last&&dIso(d2)>last) html+=`<div class="rt-s rt-bad" style="margin-top:6px">Bảng giá chỉ có đến ${esc(RT.dmy(last))}.</div>`;
+  } else if(room) html+='<div class="rt-s" style="margin-top:4px">Nhập ngày nhận và trả phòng để xem giá net.</div>';
+  if(rec.note) html+=`<details style="margin-top:8px"><summary style="cursor:pointer;font-size:12px;color:#3A7D99">Ghi chú chính sách khách sạn</summary><div style="white-space:pre-wrap;font-size:12px;margin-top:4px;max-height:200px;overflow:auto">${esc(rec.note)}</div></details>`;
+  html+='<div class="rt-s" style="margin-top:6px">Chưa tính phụ thu (cuối tuần, lễ, trẻ em, giường phụ). Xem ghi chú. Giá bán bạn tự nhập.</div></div>';
+  box.innerHTML=html;
+}
+function rateUse(i,idx){
+  const o=(rateOpts[i]||[])[idx]; if(!o||o.missing||!o.nights) return;
+  const per=Math.round(o.total/o.nights), diff=o.total-per*o.nights;
+  if(o.p!=="_none"){
+    const sel=$("spa-"+i);
+    if(sel&&[...sel.options].some(x=>x.value===o.p)){ sel.value=o.p; sel.dataset.prev=o.p; refreshSvcList(i); }
+    else toast("Đối tác này chưa thuộc loại dịch vụ đang chọn. Hãy chọn đối tác bằng tay.",5000);
+  }
+  const net=$("snet-"+i); if(net){ net.value=fmtInput(String(per)); calcTotal(); }
+  toast(diff?`Đã điền net ${VNDn(per)} đ/đêm. Tổng theo bảng giá là ${VNDn(o.total)} đ, lệch ${VNDn(Math.abs(diff))} đ do làm tròn.`:`Đã điền net ${VNDn(per)} đ/đêm (tổng ${VNDn(o.total)} đ).`,4500);
+}
+
 let impPlan=null;
 function downloadImportTemplate(){
   const blob=new Blob([BK.importTemplateCsv(catList,partners)],{type:"text/csv;charset=utf-8"});
