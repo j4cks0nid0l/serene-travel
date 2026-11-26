@@ -265,7 +265,7 @@ async function postsApi(req,env,path){
   return json({ok:true,status,original})
  }catch(e){if(/no such table/i.test(e.message||''))return json({error:'Chưa tạo bảng bài đăng. Chạy file schema-posts.sql trong Console của D1.'},503);throw e}}
 export default {async fetch(req,env){try{return await handle(req,env)}catch(err){console.error('Request failed:',err.message);return json({error:'Chưa xử lý được yêu cầu. Vui lòng thử lại.'},500)}}};
-async function uploadImage(req,env){if(!env.MEDIA)return json({error:'Chưa kết nối kho ảnh.'},503);const type=req.headers.get('content-type')||'',extensions={'image/jpeg':'jpg','image/png':'png','image/webp':'webp'};if(!extensions[type])return json({error:'Chỉ nhận JPG, PNG hoặc WebP.'},400);if(Number(req.headers.get('content-length')||0)>5*1024*1024)return json({error:'Ảnh tối đa 5 MB.'},413);const bytes=await req.arrayBuffer();if(bytes.byteLength>5*1024*1024)return json({error:'Ảnh tối đa 5 MB.'},413);const b=new Uint8Array(bytes);const signature=type==='image/jpeg'?b[0]===255&&b[1]===216&&b[2]===255:type==='image/png'?hex(bytes.slice(0,8))==='89504e470d0a1a0a':String.fromCharCode(...b.slice(0,4))==='RIFF'&&String.fromCharCode(...b.slice(8,12))==='WEBP';if(!signature)return json({error:'Tệp không phải ảnh hợp lệ.'},400);const key=crypto.randomUUID()+'.'+extensions[type];await env.MEDIA.put(key,bytes,{httpMetadata:{contentType:type}});return json({url:'/media/'+key})}
+async function uploadImage(req,env,maxMb=5){const MAX=maxMb*1024*1024;if(!env.MEDIA)return json({error:'Chưa kết nối kho ảnh.'},503);const type=req.headers.get('content-type')||'',extensions={'image/jpeg':'jpg','image/png':'png','image/webp':'webp'};if(!extensions[type])return json({error:'Chỉ nhận JPG, PNG hoặc WebP.'},400);if(Number(req.headers.get('content-length')||0)>MAX)return json({error:'Ảnh tối đa '+maxMb+' MB.'},413);const bytes=await req.arrayBuffer();if(bytes.byteLength>MAX)return json({error:'Ảnh tối đa '+maxMb+' MB.'},413);const b=new Uint8Array(bytes);const signature=type==='image/jpeg'?b[0]===255&&b[1]===216&&b[2]===255:type==='image/png'?hex(bytes.slice(0,8))==='89504e470d0a1a0a':String.fromCharCode(...b.slice(0,4))==='RIFF'&&String.fromCharCode(...b.slice(8,12))==='WEBP';if(!signature)return json({error:'Tệp không phải ảnh hợp lệ.'},400);const key=crypto.randomUUID()+'.'+extensions[type];await env.MEDIA.put(key,bytes,{httpMetadata:{contentType:type}});return json({url:'/media/'+key})}
 // ---- API cho máy (Claude, Make): khóa riêng dạng Bearer, chỉ lưu bản băm trong bảng machine_tokens ----
 async function machineScope(req,env){
  const m=/^Bearer ([A-Za-z0-9_-]{40,80})$/.exec(req.headers.get('authorization')||'');if(!m)return null;
@@ -649,6 +649,88 @@ async function staffLogin(env,mail,pass,req){
  await logAudit(env,{id:row.id,name:row.name,role:row.role,owner:false},'login',row.id,'Đăng nhập');
  return json({email:row.email,csrf,name:row.name,role:row.role},200,{'set-cookie':sessionCookie(token,28800,req)})
 }
+// ---- Copy nhanh: tin nhắn mẫu + thư viện ảnh khách sạn (chỉ Chủ) ----
+const quickReady=new WeakMap();
+async function ensureQuickTables(env){
+ let p=quickReady.get(env.DB);
+ if(!p){
+  p=(async()=>{
+   await env.DB.prepare('CREATE TABLE IF NOT EXISTS quick_msgs (id TEXT PRIMARY KEY, grp TEXT NOT NULL DEFAULT \'\', title TEXT NOT NULL, body TEXT NOT NULL, created TEXT NOT NULL, updated TEXT NOT NULL)').run();
+   await env.DB.prepare('CREATE TABLE IF NOT EXISTS quick_photos (id TEXT PRIMARY KEY, album TEXT NOT NULL, label TEXT NOT NULL DEFAULT \'\', url TEXT NOT NULL, created TEXT NOT NULL)').run();
+  })();
+  quickReady.set(env.DB,p);
+  p.catch(()=>quickReady.delete(env.DB));
+ }
+ await p;
+}
+const QUICK_URL_RE=/^\/media\/[a-zA-Z0-9._-]+$/;
+const quickClean=(v,max)=>String(v==null?'':v).replace(/\r\n/g,'\n').trim().slice(0,max);
+async function quickApi(req,env,path){
+ if(!env.DB)return json({error:'Chưa kết nối cơ sở dữ liệu.'},503);
+ await ensureQuickTables(env);
+ const now=new Date().toISOString();
+ const m=/^\/api\/quick(?:\/(msg|photo)(?:\/([A-Za-z0-9]{6,30}))?)?$/.exec(path);
+ if(!m)return json({error:'Không tìm thấy.'},404);
+ const kind=m[1],id=m[2];
+ if(!kind){
+  if(req.method!=='GET')return json({error:'Không hỗ trợ.'},405);
+  const msgs=await env.DB.prepare('SELECT id,grp,title,body,updated FROM quick_msgs ORDER BY grp COLLATE NOCASE, title COLLATE NOCASE LIMIT 600').all();
+  const photos=await env.DB.prepare('SELECT id,album,label,url,created FROM quick_photos ORDER BY album COLLATE NOCASE, created DESC LIMIT 3000').all();
+  return json({msgs:msgs.results,photos:photos.results});
+ }
+ let data={};
+ if(req.method==='POST'||req.method==='PUT'){try{data=await req.json()}catch{return json({error:'Dữ liệu không hợp lệ.'},400)}}
+ const newId=()=>'Q'+crypto.randomUUID().replace(/-/g,'').slice(0,16);
+ if(kind==='msg'){
+  const grp=quickClean(data.grp,40),title=quickClean(data.title,80),body=quickClean(data.body,4000);
+  if(req.method==='POST'){
+   if(!title||!body)return json({error:'Nhập tên mẫu và nội dung.'},400);
+   const c=await env.DB.prepare('SELECT COUNT(*) n FROM quick_msgs').first();
+   if(c.n>=500)return json({error:'Đã đủ 500 mẫu, hãy xóa bớt mẫu cũ.'},400);
+   const nid=newId();
+   await env.DB.prepare('INSERT INTO quick_msgs (id,grp,title,body,created,updated) VALUES (?,?,?,?,?,?)').bind(nid,grp,title,body,now,now).run();
+   return json({msg:{id:nid,grp,title,body,updated:now}},201);
+  }
+  if(!id)return json({error:'Thiếu mã mẫu.'},400);
+  if(req.method==='PUT'){
+   if(!title||!body)return json({error:'Nhập tên mẫu và nội dung.'},400);
+   const r=await env.DB.prepare('UPDATE quick_msgs SET grp=?,title=?,body=?,updated=? WHERE id=?').bind(grp,title,body,now,id).run();
+   if(!r.meta.changes)return json({error:'Không tìm thấy mẫu.'},404);
+   return json({msg:{id,grp,title,body,updated:now}});
+  }
+  if(req.method==='DELETE'){await env.DB.prepare('DELETE FROM quick_msgs WHERE id=?').bind(id).run();return json({ok:true})}
+  return json({error:'Không hỗ trợ.'},405);
+ }
+ const album=quickClean(data.album,80),label=quickClean(data.label,40);
+ if(req.method==='POST'){
+  if(!album)return json({error:'Chọn hoặc nhập tên khách sạn.'},400);
+  const url=String(data.url||'');
+  if(!QUICK_URL_RE.test(url))return json({error:'Ảnh không hợp lệ.'},400);
+  const c=await env.DB.prepare('SELECT COUNT(*) n FROM quick_photos').first();
+  if(c.n>=3000)return json({error:'Đã đủ 3000 ảnh, hãy xóa bớt ảnh cũ.'},400);
+  const nid=newId();
+  await env.DB.prepare('INSERT INTO quick_photos (id,album,label,url,created) VALUES (?,?,?,?,?)').bind(nid,album,label,url,now).run();
+  return json({photo:{id:nid,album,label,url,created:now}},201);
+ }
+ if(!id)return json({error:'Thiếu mã ảnh.'},400);
+ if(req.method==='PUT'){
+  if(!album)return json({error:'Nhập tên khách sạn.'},400);
+  const r=await env.DB.prepare('UPDATE quick_photos SET album=?,label=? WHERE id=?').bind(album,label,id).run();
+  if(!r.meta.changes)return json({error:'Không tìm thấy ảnh.'},404);
+  return json({ok:true});
+ }
+ if(req.method==='DELETE'){
+  const row=await env.DB.prepare('SELECT url FROM quick_photos WHERE id=?').bind(id).first();
+  await env.DB.prepare('DELETE FROM quick_photos WHERE id=?').bind(id).run();
+  // Xóa file ảnh khỏi kho nếu không còn nơi nào dùng
+  if(row&&env.MEDIA&&env.MEDIA.delete){
+   const left=await env.DB.prepare('SELECT COUNT(*) n FROM quick_photos WHERE url=?').bind(row.url).first();
+   if(!left.n)try{await env.MEDIA.delete(row.url.slice(7))}catch{}
+  }
+  return json({ok:true});
+ }
+ return json({error:'Không hỗ trợ.'},405);
+}
 async function handle(req,env){const u=new URL(req.url),path=u.pathname;
 if(path.startsWith('/media/')){if(req.method!=='GET')return json({error:'Không hỗ trợ.'},405);const key=path.slice(7);if(!/^[a-zA-Z0-9._-]+$/.test(key))return new Response('Not found',{status:404});if(!env.MEDIA)return new Response('Not configured',{status:503});const o=await env.MEDIA.get(key);if(!o)return new Response('Not found',{status:404});return new Response(o.body,{headers:{'content-type':o.httpMetadata?.contentType||'application/octet-stream','cache-control':'public,max-age=31536000,immutable','x-content-type-options':'nosniff'}})}
 if(!path.startsWith('/api/')){const response=await env.ASSETS.fetch(req);const headers=new Headers(response.headers);headers.set('X-Content-Type-Options','nosniff');headers.set('Referrer-Policy','strict-origin-when-cross-origin');headers.set('Content-Security-Policy',path.startsWith('/admin/booking')?BOOKING_CSP:CSP);if(path.startsWith('/admin'))headers.set('Cache-Control','no-store');return new Response(response.body,{status:response.status,headers})}
@@ -688,7 +770,7 @@ if(!actor.owner&&!/^\/api\/(booking|booking-qr|booking-settings|booking-units|ho
 if(path==='/api/staff'||path.startsWith('/api/staff/'))return staffApi(req,env,path,actor,u);
 if(path==='/api/audit'&&req.method==='GET')return auditApi(req,env,u,actor);
 if(path==='/api/content'&&req.method==='GET'){const {results}=await env.DB.prepare('SELECT * FROM content ORDER BY updated DESC').all();return json({items:results.map(x=>({id:x.id,draft:JSON.parse(x.draft),published:x.published?JSON.parse(x.published):null,updated:x.updated}))})}
-if(path==='/api/upload'&&req.method==='POST')return uploadImage(req,env);
+if(path==='/api/upload'&&req.method==='POST')return uploadImage(req,env,actor.owner&&u.searchParams.get('big')==='1'?20:5);
 if(path==='/api/booking-qr'&&req.method==='GET'){
  // Lấy mã QR VietQR qua máy chủ để trình duyệt chụp ảnh phiếu được (không bị chặn khác nguồn). Tài khoản nhận cố định.
  const amount=u.searchParams.get('amount')||'0',info=u.searchParams.get('info')||'';
@@ -805,6 +887,7 @@ if(path==='/api/booking-settings'){
  return json({error:'Không hỗ trợ.'},405)
 }
 if(path==='/api/posts'||path.startsWith('/api/posts/'))return postsApi(req,env,path);
+if(path==='/api/quick'||path.startsWith('/api/quick/'))return quickApi(req,env,path);
 const crm=await crmApi(req,env,path,actor);if(crm)return crm;
 if(path==='/api/booking'||path.startsWith('/api/booking/'))return bookingApi(req,env,path,actor);
 const match=/^\/api\/content\/([a-z0-9-]{1,90})$/.exec(path);if(match&&req.method==='PUT'){if(Number(req.headers.get('content-length')||0)>200000)return json({error:'Nội dung quá lớn.'},413);let input,p;try{input=await req.json();p=validate(input.data,match[1])}catch(e){return json({error:e.message||'Nội dung không hợp lệ.'},400)}const id=match[1];if(id!=='settings'&&!id.startsWith('service-')&&!id.startsWith('post-'))return json({error:'Mục không hợp lệ.'},400);const mode=input.mode;if(!['draft','publish','unpublish'].includes(mode))return json({error:'Thao tác không hợp lệ.'},400);const old=await env.DB.prepare('SELECT draft,published FROM content WHERE id=?').bind(id).first();const published=mode==='publish'?JSON.stringify(p):mode==='unpublish'?null:old?.published||null;let wasHidden=false;try{wasHidden=!!JSON.parse(old?.draft||'{}').hidden}catch{}const hidden=id!=='settings'&&(mode==='unpublish'||(mode==='draft'&&!old?.published&&wasHidden));await env.DB.prepare('INSERT INTO content(id,draft,published,updated) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET draft=excluded.draft,published=excluded.published,updated=excluded.updated').bind(id,JSON.stringify(hidden?{...p,hidden:true}:p),published,new Date().toISOString()).run();return json({ok:true})}
