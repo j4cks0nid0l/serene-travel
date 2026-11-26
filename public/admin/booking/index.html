@@ -286,6 +286,10 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
 .crm-row{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:.5px solid rgba(58,125,153,.15)}
 .crm-row:last-child{border-bottom:0}
 .crm-acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.stat-note{font-size:11px;color:#7A8FA0;line-height:1.4;padding:0 2px}
+.sup-per{border:.5px solid rgba(58,125,153,.2);border-radius:9px;padding:9px 10px;margin-top:8px}
+.sup-top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.sup-ord{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:#5B7285;padding:3px 0}
 .warn-box{background:#FFF1F1;border:.5px solid rgba(184,92,92,.35);color:#9B4040;border-radius:9px;padding:9px 11px;font-size:12.5px;margin-bottom:10px}
 </style>
 </head>
@@ -412,6 +416,7 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
   <div class="stat-grid" id="debt-grid"></div>
   <div class="card"><div class="sec-title"><i class="ti ti-receipt"></i>Khách còn nợ</div><div id="debt-wrap"></div></div>
   <div class="card" id="debt-extra" style="display:none"></div>
+  <div class="card"><div class="sec-title"><i class="ti ti-building-store"></i>Mình nợ đối tác</div><div id="debt-sup"></div></div>
 </div>
 
 <div class="panel" id="panel-stats">
@@ -1099,6 +1104,8 @@ function renderPartnerList(){
     </div>
     <label>Email CC (cách nhau dấu phẩy)</label>
     <input maxlength="400" value="${escAttr((p.cc||[]).join(", "))}" placeholder="Có thể để trống" onchange="partnerUpdate('${p.id}','cc',this.value)" style="margin-bottom:8px">
+    <label>Chu kỳ trả tiền đối tác (tính theo ngày đặt phòng)</label>
+    <select style="margin-bottom:8px" onchange="partnerUpdate('${p.id}','cycle',this.value)"><option value="month"${p.cycle!=="week"?" selected":""}>Trả theo tháng</option><option value="week"${p.cycle==="week"?" selected":""}>Trả theo tuần</option></select>
     <label>Loại dịch vụ cung cấp</label>
     <div class="unit-cats" style="margin-bottom:8px">${catChecks(`data-pid="${p.id}" onchange="partnerToggleCat(this)" `,p.cats)}</div>
     <label>Dịch vụ (mỗi dòng một dịch vụ)</label>
@@ -1118,7 +1125,10 @@ async function saveCcInternal(){
 async function partnerUpdate(pid,field,val){
   const p=partners.find(x=>x.id===pid); if(!p) return;
   const before=JSON.stringify(p);
-  if(field==="services"){
+  if(field==="cycle"){
+    if(val!=="week"&&val!=="month") return;
+    p.cycle=val;
+  } else if(field==="services"){
     const l=BK.parseServices(val);
     if(l===null){ toast("Mỗi dịch vụ tối đa 80 ký tự, không dùng < >, tối đa 100 dịch vụ",4000); renderPartnerList(); return; }
     p.services=l;
@@ -2159,11 +2169,11 @@ function renderStats(){
   const cs=BK.commissionStats(bookings,customers);
   const profit=rev-totalNet-cs.total;
   $("stat-grid").innerHTML=`
-    <div class="stat-card"><div class="stat-val" style="font-size:22px;color:#2A5F78">${live.length}</div><div class="stat-lbl">Đơn (không tính hủy)</div></div>
+    <div class="stat-card"><div class="stat-val" style="font-size:22px;color:#2A5F78">${live.length}</div><div class="stat-lbl">Đơn (trừ hủy)</div></div>
     <div class="stat-card"><div class="stat-val" style="font-size:13px;color:#2A5F78">${VNDn(rev)} đ</div><div class="stat-lbl">Doanh thu</div></div>
     <div class="stat-card"><div class="stat-val" style="font-size:13px;color:#C8963C">${VNDn(rev-paid)} đ</div><div class="stat-lbl">Chưa thu</div></div>
     <div class="stat-card"><div class="stat-val" style="font-size:13px;color:#4A9B6F">${VNDn(paid)} đ</div><div class="stat-lbl">Đã thu</div></div>
-    <div class="stat-card" style="grid-column:span 2"><div class="stat-val" style="font-size:13px;color:${profit>=0?"#2E7D32":"#B85C5C"}">${hasNet?(VNDn(profit)+" đ"):"Chưa đủ giá net"}</div><div class="stat-lbl">Lợi nhuận = bán - net - hoa hồng</div></div>`;
+    <div class="stat-card" style="grid-column:span 2"><div class="stat-val" style="font-size:13px;color:${profit>=0?"#2E7D32":"#B85C5C"}">${hasNet?(VNDn(profit)+" đ"):"Chưa đủ giá net"}</div><div class="stat-lbl">Lãi (bán - net - hoa hồng)</div></div>`;
   renderCommStats(cs);
   const sl=$("stat-list");
   if(!bookings.length){ sl.innerHTML='<div class="empty"><i class="ti ti-chart-bar"></i>Chưa có dữ liệu</div>'; return; }
@@ -2275,15 +2285,46 @@ function renderDebt(){
   // Đơn chưa gắn khách nào vẫn phải tính vào nợ để không sót
   const noCust=bookings.filter(b=>!BK.bookingCustomerId(b,customers)&&BK.orderStatusOf(b)==="success").reduce((a,b)=>a+(b.totalAmt-BK.paidOf(b)),0);
   $("debt-grid").innerHTML=`
-    <div class="stat-card"><div class="stat-val" style="font-size:13px;color:#C8963C">${VNDn(debt+noCust)} đ</div><div class="stat-lbl">Khách còn nợ (đơn Thành công)</div></div>
-    <div class="stat-card"><div class="stat-val" style="font-size:13px;color:#2A5F78">${VNDn(pre)} đ</div><div class="stat-lbl">Đã nhận trước (đơn đang xử lý)</div></div>
-    <div class="stat-card" style="grid-column:span 2"><div class="stat-val" style="font-size:13px;color:#B85C5C">${VNDn(ref)} đ</div><div class="stat-lbl">Cần hoàn cho khách (đơn đã hủy)</div></div>`;
+    <div class="stat-card"><div class="stat-val" style="font-size:13px;color:#C8963C">${VNDn(debt+noCust)} đ</div><div class="stat-lbl">Khách nợ</div></div>
+    <div class="stat-card"><div class="stat-val" style="font-size:13px;color:#2A5F78">${VNDn(pre)} đ</div><div class="stat-lbl">Nhận trước</div></div>
+    <div class="stat-card"><div class="stat-val" style="font-size:13px;color:#B85C5C">${VNDn(ref)} đ</div><div class="stat-lbl">Cần hoàn</div></div>
+    <div class="stat-note" style="grid-column:1/-1">Khách nợ: đơn Thành công chưa thu đủ. Nhận trước: tiền đã thu của đơn Đang xử lý. Cần hoàn: tiền đã thu của đơn Hủy.</div>`;
+  renderSupDebt();
   const rows=bookings.filter(b=>BK.orderStatusOf(b)==="success"&&b.totalAmt-BK.paidOf(b)>0);
   $("debt-wrap").innerHTML=rows.length?rows.map(b=>`<div class="crm-row" style="cursor:pointer" onclick="selId='${b.id}';switchTab('list');showDetail('${b.id}')"><div><div style="font-size:11px;font-weight:600;color:#5BA4A4">${b.id}</div><div style="font-size:14px">${esc(b.name)}</div><div style="font-size:12px;color:#7A8FA0">${esc(b.phone)}</div></div><div style="text-align:right"><div style="font-weight:700;color:#C8963C">${VNDn(b.totalAmt-BK.paidOf(b))} đ</div><div style="font-size:11.5px;color:#7A8FA0">/ ${VNDn(b.totalAmt)} đ</div></div></div>`).join(""):'<div class="empty"><i class="ti ti-circle-check"></i>Không có khách nào còn nợ</div>';
   const rf=bookings.filter(b=>BK.orderStatusOf(b)==="cancelled"&&BK.paidOf(b)>0), ex=$("debt-extra");
   if(!rf.length){ ex.style.display="none"; return; }
   ex.style.display="";
   ex.innerHTML='<div class="sec-title"><i class="ti ti-arrow-back-up"></i>Đơn hủy cần hoàn tiền</div>'+rf.map(b=>`<div class="crm-row"><div><div style="font-size:11px;font-weight:600;color:#B85C5C">${b.id}</div><div style="font-size:14px">${esc(b.name)}</div></div><div style="font-weight:700;color:#B85C5C">${VNDn(BK.paidOf(b))} đ</div></div>`).join("");
+}
+// Công nợ đối tác: mình nợ ai, kỳ nào, bao nhiêu. Giá net tính từ lúc tạo đơn, đơn Hủy tự bỏ.
+function renderSupDebt(){
+  const el=$("debt-sup"); if(!el) return;
+  const rows=BK.supplierLedger(bookings,partners);
+  if(!rows.length){ el.innerHTML='<div class="empty"><i class="ti ti-circle-check"></i>Chưa có khoản nào phải trả đối tác. Nhập giá net và chọn đối tác ở từng dịch vụ.</div>'; return; }
+  const tot=rows.reduce((a,r)=>a+r.owed,0);
+  el.innerHTML=`<div style="font-size:13px;margin-bottom:6px">Tổng còn phải trả: <b style="color:#C8963C">${VND(tot)}</b></div>`+rows.map(r=>`<details style="margin-bottom:8px"${r.owed>0?" open":""}><summary style="cursor:pointer;font-size:14px;font-weight:600;padding:6px 0">${esc(r.name)} <span class="kind-tag">${r.cycle==="week"?"Trả theo tuần":"Trả theo tháng"}</span> <span style="float:right;color:${r.owed>0?"#C8963C":"#4A9B6F"}">${r.owed>0?VNDn(r.owed)+" đ":"Đã trả hết"}</span></summary>
+    ${r.missing?`<div class="warn-box">${r.missing} dịch vụ chưa nhập giá net, chưa được tính vào số trên.</div>`:""}
+    ${r.refund>0?`<div class="warn-box">Đã trả ${VND(r.refund)} cho đơn đã hủy. Cần đòi lại hoặc trừ vào kỳ sau.</div>`:""}
+    ${r.plist.map(q=>`<div class="sup-per"><div class="sup-top"><div><div style="font-size:13px;font-weight:600">${esc(q.label)}</div><div style="font-size:12px;color:#7A8FA0">${q.orders.length} đơn · net ${VNDn(q.total)} đ${q.paid?` · đã trả ${VNDn(q.paid)} đ`:""}</div></div>
+      <div style="text-align:right;white-space:nowrap"><div style="font-weight:700;color:${q.owed>0?"#C8963C":q.owed<0?"#B85C5C":"#4A9B6F"}">${q.owed>0?VNDn(q.owed)+" đ":q.owed<0?"Trả dư "+VNDn(-q.owed)+" đ":"Đã trả"}</div>
+      ${q.owed>0?`<button class="mini-btn" style="margin-top:4px" onclick="supPay('${r.id}','${q.key}',true)">Đã trả kỳ này</button>`:(q.paid>0?`<button class="mini-btn" style="margin-top:4px" onclick="supPay('${r.id}','${q.key}',false)">Hoàn tác</button>`:"")}</div></div>
+      ${q.orders.map(o=>`<div class="sup-ord"><span>${esc(o.id)} · ${esc(o.name)}${o.missing?" (thiếu net)":""}</span><span>${VNDn(o.net)} đ</span></div>`).join("")}</div>`).join("")}</details>`).join("");
+}
+function supPay(pkey,periodKey,paying){
+  const rows=BK.supplierLedger(bookings,partners), r=rows.find(x=>x.id===pkey); if(!r) return;
+  const q=r.plist.find(x=>x.key===periodKey); if(!q) return;
+  const amt=paying?q.owed:q.paid;
+  askConfirm(`${paying?"Xác nhận đã trả":"Hoàn tác khoản đã trả"} <b>${VND(amt)}</b> cho <b>${esc(r.name)}</b>, kỳ <b>${esc(q.label)}</b>?<div class="pay-modal-sub">${q.orders.length} đơn trong kỳ này sẽ được ${paying?"đánh dấu đã trả":"mở lại là chưa trả"}.</div>`,async()=>{
+    const today=new Date().toLocaleDateString("vi-VN"), changed=[];
+    q.orders.forEach(o=>{
+      const b=bookings.find(x=>x.id===o.id); if(!b) return;
+      if(paying){ if(o.net<=0) return; b.supPaid=b.supPaid||{}; b.supPaid[pkey]={amount:o.net,date:today}; changed.push(b); }
+      else if(b.supPaid&&b.supPaid[pkey]){ delete b.supPaid[pkey]; if(!Object.keys(b.supPaid).length) delete b.supPaid; changed.push(b); }
+    });
+    for(const b of changed) await saveBooking(b);
+    toast(paying?"Đã ghi nhận trả "+r.name:"Đã hoàn tác"); renderDebt();
+  });
 }
 const LEAD_LBL={new:"Mới",contacted:"Đã liên hệ",ordered:"Đã lên đơn",lost:"Mất"};
 async function leadAdd(){

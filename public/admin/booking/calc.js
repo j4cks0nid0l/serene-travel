@@ -141,6 +141,7 @@
         cc: parseEmails(Array.isArray(p.cc) ? p.cc.join(',') : '') || [],
         cats: cats, services: services || []
       });
+      if (p.cycle === 'week' || p.cycle === 'month') out[out.length - 1].cycle = p.cycle;
     });
     return out;
   }
@@ -331,6 +332,68 @@
     return { rows: order.map(function (id) { return by[id]; }), total: total, paid: paid, unpaid: total - paid };
   }
 
+  // ---- Công nợ đối tác (mình nợ đối tác) ----
+  // Giá net tính vào công nợ ngay khi tạo đơn (kể cả Đang xử lý); đơn Hủy thì bỏ.
+  // Kỳ trả tính theo ngày đặt phòng (ngày tạo đơn). Đối tác không đặt chu kỳ thì mặc định theo tháng.
+  var NO_PARTNER = '_none';
+  function cycleOf(p) { return p && p.cycle === 'week' ? 'week' : 'month'; }
+  function parseVnDate(s) {
+    var m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(s == null ? '' : s).trim());
+    if (!m) return null;
+    var d = new Date(+m[3], +m[2] - 1, +m[1]);
+    return d.getFullYear() === +m[3] && d.getMonth() === +m[2] - 1 && d.getDate() === +m[1] ? d : null;
+  }
+  function p2(n) { return (n < 10 ? '0' : '') + n; }
+  function ymd(d) { return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()); }
+  function dm(d) { return p2(d.getDate()) + '/' + p2(d.getMonth() + 1); }
+  function periodOf(d, cycle) {
+    if (!d) return { key: 'x', label: 'Không rõ ngày đặt', start: 0 };
+    if (cycle === 'week') {
+      var mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7));
+      var sun = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + 6);
+      return { key: 'w' + ymd(mon), label: 'Tuần ' + dm(mon) + ' - ' + dm(sun) + '/' + sun.getFullYear(), start: mon.getTime() };
+    }
+    return { key: 'm' + d.getFullYear() + '-' + p2(d.getMonth() + 1), label: 'Tháng ' + p2(d.getMonth() + 1) + '/' + d.getFullYear(), start: new Date(d.getFullYear(), d.getMonth(), 1).getTime() };
+  }
+  function supPaidOf(b, key) {
+    var r = b && b.supPaid && b.supPaid[key];
+    return r && Number(r.amount) > 0 ? Number(r.amount) : 0;
+  }
+  // Mỗi đối tác: danh sách kỳ trả, mỗi kỳ có các đơn, số net phải trả và đã trả
+  function supplierLedger(bookings, partners) {
+    var rows = {}, order = [];
+    (bookings || []).forEach(function (b) {
+      var cancelled = orderStatusOf(b) === 'cancelled';
+      var per = {};
+      (b.svcs || []).forEach(function (s) {
+        var key = s.partnerId || NO_PARTNER;
+        if (!per[key]) per[key] = { net: 0, missing: 0, name: s.partner || '' };
+        if (s.totalNet > 0) per[key].net += s.totalNet; else per[key].missing++;
+        if (!per[key].name && s.partner) per[key].name = s.partner;
+      });
+      Object.keys(per).forEach(function (key) {
+        var x = per[key], paid = supPaidOf(b, key);
+        if (!x.net && !x.missing && !paid) return;
+        var p = key === NO_PARTNER ? null : findPartner(partners, key);
+        if (!rows[key]) {
+          rows[key] = { id: key, name: p ? p.name : (key === NO_PARTNER ? 'Chưa chọn đối tác' : (x.name || 'Đối tác đã xóa')), cycle: cycleOf(p), periods: {}, plist: [], total: 0, paid: 0, owed: 0, refund: 0, missing: 0 };
+          order.push(key);
+        }
+        var r = rows[key];
+        if (cancelled) { r.refund += paid; return; }
+        var pd = periodOf(parseVnDate(b.created), r.cycle);
+        if (!r.periods[pd.key]) { r.periods[pd.key] = { key: pd.key, label: pd.label, start: pd.start, total: 0, paid: 0, owed: 0, missing: 0, orders: [] }; r.plist.push(r.periods[pd.key]); }
+        var q = r.periods[pd.key];
+        q.orders.push({ id: b.id, name: b.name, net: x.net, paid: paid, owed: x.net - paid, missing: x.missing });
+        q.total += x.net; q.paid += paid; q.owed += x.net - paid; q.missing += x.missing;
+        r.total += x.net; r.paid += paid; r.owed += x.net - paid; r.missing += x.missing;
+      });
+    });
+    return order.map(function (k) {
+      var r = rows[k]; r.plist.sort(function (a, b) { return b.start - a.start; }); delete r.periods; return r;
+    }).sort(function (a, b) { return b.owed - a.owed; });
+  }
+
   // ---- Thống kê theo loại ----
   function statsByCat(bookings, cats) {
     var rows = {}, order = [];
@@ -384,6 +447,7 @@
     buildService: buildService, svcLines: svcLines, unitsOf: unitsOf, applyNet: applyNet, netState: netState,
     statsByCat: statsByCat, csvRows: csvRows,
     ORDER_STATUSES: ORDER_STATUSES, ORDER_STATUS_LABELS: ORDER_STATUS_LABELS, orderStatusOf: orderStatusOf, isApproved: isApproved, paidOf: paidOf, pendingOf: pendingOf,
+    NO_PARTNER: NO_PARTNER, cycleOf: cycleOf, parseVnDate: parseVnDate, periodOf: periodOf, supPaidOf: supPaidOf, supplierLedger: supplierLedger,
     commissionOf: commissionOf, commissionDue: commissionDue, bookingCustomerId: bookingCustomerId, customerLedger: customerLedger, commissionStats: commissionStats,
     NOTE_MAX: NOTE_MAX, cleanText: cleanText, validPhone: validPhone, validEmail: validEmail, validPartnerName: validPartnerName,
     parseServices: parseServices, parseEmails: parseEmails, mergeEmails: mergeEmails, gmailUrl: gmailUrl, gmailAppUrl: gmailAppUrl, mailtoUrl: mailtoUrl, normalizePartners: normalizePartners, partnersForCat: partnersForCat, findPartner: findPartner

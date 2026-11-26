@@ -58,7 +58,8 @@ function cleanBookingPartners(v){
   if(p.services!==undefined&&(!Array.isArray(p.services)||p.services.length>100))return null;
   const services=[];for(const s of p.services||[]){const x=t(s,80);if(!x)return null;if(!services.includes(x))services.push(x)}
   if(names.has(name.toLowerCase()))return null;
-  ids.add(p.id);names.add(name.toLowerCase());out.push({id:p.id,name,phone,email,cc,cats:[...new Set(p.cats)],services})
+  if(p.cycle!==undefined&&p.cycle!=='week'&&p.cycle!=='month')return null;
+  ids.add(p.id);names.add(name.toLowerCase());const o={id:p.id,name,phone,email,cc,cats:[...new Set(p.cats)],services};if(p.cycle)o.cycle=p.cycle;out.push(o)
  }
  return JSON.stringify(out).length>300000?null:out
 }
@@ -74,6 +75,7 @@ function cleanUnitHide(v){
  return out
 }
 // Trường quản lý khách và hoa hồng của đơn (đều không bắt buộc, đơn cũ không có vẫn hợp lệ)
+const SUP_KEY_RE=/^[A-Za-z0-9_-]{1,40}$/;
 const BOOKING_ORDER_STATUSES=['processing','success','cancelled'],CUSTOMER_ID_RE=/^c[a-z0-9]{3,24}$/;
 function validateCrmFields(b){
  if(b.orderStatus!==undefined&&!BOOKING_ORDER_STATUSES.includes(b.orderStatus))throw Error('Trạng thái đơn không hợp lệ.');
@@ -82,6 +84,11 @@ function validateCrmFields(b){
  for(const p of b.payments){
   if(p.status!==undefined&&!['approved','pending'].includes(p.status))throw Error('Trạng thái phiếu thu không hợp lệ.');
   if(p.code!==undefined&&!(typeof p.code==='string'&&p.code.length<=30&&!/[<>"&]/.test(p.code)))throw Error('Mã phiếu thu không hợp lệ.');
+ }
+ const sp=b.supPaid;
+ if(sp!==undefined&&sp!==null){
+  if(typeof sp!=='object'||Array.isArray(sp)||Object.keys(sp).length>60)throw Error('Thông tin trả đối tác không hợp lệ.');
+  for(const k of Object.keys(sp)){const v=sp[k];if(!SUP_KEY_RE.test(k)||!v||typeof v!=='object'||!Number.isFinite(v.amount)||v.amount<0||v.amount>10000000000||(v.date!==undefined&&!(typeof v.date==='string'&&v.date.length<=20&&!/[<>]/.test(v.date))))throw Error('Thông tin trả đối tác không hợp lệ.')}
  }
  const c=b.commission;
  if(c!==undefined&&c!==null){
