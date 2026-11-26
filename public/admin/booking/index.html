@@ -249,6 +249,7 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
 .sb-sub.open{display:flex}
 .sb-sub-item{font-family:inherit;font-size:13px;color:#5A6F7D;background:none;border:none;text-align:left;padding:7px 10px;border-radius:8px;cursor:pointer}
 .sb-sub-item:hover{background:#F0F7FA}
+.cp-t{width:100%;border-collapse:collapse;font-size:12.5px}.cp-t th{text-align:left;font-weight:600;color:#5B7285;padding:5px 6px;border-bottom:.5px solid rgba(58,125,153,.25);white-space:nowrap}.cp-t td{padding:4px 6px;border-bottom:.5px solid rgba(58,125,153,.12);vertical-align:middle}.cp-in{width:110px;padding:6px 8px;font-size:13px}.cp-in.cp-manual{border-color:#C9943A;background:#FFF9EC}.cp-in::placeholder{color:#9FB2BF}
 .sb-badge{display:inline-block;margin-left:6px;min-width:18px;padding:0 6px;border-radius:9px;background:#C9943A;color:#fff;font-size:11px;font-weight:700;line-height:18px;text-align:center}.sb-badge[hidden]{display:none}
 .sb-sub-item.active{color:#2A5F78;font-weight:600;background:#EBF5F9}
 .sb-bottom{border-top:.5px solid rgba(58,125,153,.15);padding-top:8px;margin-top:10px;display:flex;flex-direction:column;gap:2px}
@@ -385,6 +386,7 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
       <button class="sb-sub-item" data-sub="data" onclick="go('settings','data')">Dữ liệu</button>
       <button class="sb-sub-item" data-sub="accounts" onclick="go('settings','accounts')">Tài khoản nhân viên</button>
       <button class="sb-sub-item" data-sub="ctv" onclick="go('settings','ctv')">Cộng tác viên<span id="ctv-badge" class="sb-badge" hidden></span></button>
+      <button class="sb-sub-item" data-sub="ctvprice" onclick="go('settings','ctvprice')">Giá CTV</button>
       <button class="sb-sub-item" data-sub="audit" onclick="go('settings','audit')">Nhật ký thao tác</button>
       <button class="sb-sub-item" data-sub="password" onclick="go('settings','password')">Đổi mật khẩu</button>
     </div>
@@ -632,6 +634,29 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
     <div id="ctv-list"></div>
   </div>
 
+  <div class="card set-page" data-page="ctvprice">
+    <div class="sec-title"><i class="ti ti-coin"></i>Giá CTV</div>
+    <div style="font-size:12.5px;color:#5B7285;line-height:1.5;margin-bottom:10px">Giá CTV tự tính từ giá net theo quy tắc bên dưới. Muốn khác cho một hạng phòng thì nhập tay, ô nhập tay thắng quy tắc. Giá net đổi thì giá tự tính đổi theo.</div>
+    <div class="acc-card">
+      <div style="font-weight:600;font-size:13px;margin-bottom:6px">Quy tắc chung</div>
+      <div class="field-row"><div><label>Ngưỡng giá net (đ)</label><input id="cp-thresh" inputmode="numeric" oninput="this.value=fmtInput(this.value);cpRuleHint()"></div><div><label>Net dưới ngưỡng: cộng (%)</label><input id="cp-pct" inputmode="decimal" maxlength="6" oninput="cpRuleHint()"></div></div>
+      <div class="field-row"><div><label>Net từ ngưỡng trở lên: cộng (đ/phòng/đêm)</label><input id="cp-fixed" inputmode="numeric" oninput="this.value=fmtInput(this.value);cpRuleHint()"></div><div><label>Làm tròn lên tới (đ)</label><input id="cp-round" inputmode="numeric" oninput="this.value=fmtInput(this.value);cpRuleHint()"></div></div>
+      <div id="cp-hint" style="font-size:12px;color:#5B7285;line-height:1.5;margin:4px 0 8px"></div>
+      <div class="field-row"><div><label>Thử với giá net</label><input id="cp-try" inputmode="numeric" placeholder="VD: 2.000.000" oninput="this.value=fmtInput(this.value);cpRuleHint()"></div><div><label>Giá CTV ra</label><input id="cp-try-out" readonly></div></div>
+      <button class="btn-main cp-edit" onclick="cpSaveRule()"><i class="ti ti-device-floppy"></i>Lưu quy tắc chung</button>
+    </div>
+    <div class="acc-card">
+      <div style="font-weight:600;font-size:13px;margin-bottom:6px">File giá CTV</div>
+      <div style="font-size:12px;color:#5B7285;line-height:1.5;margin-bottom:8px">Tải file về, sửa cột Giá CTV rồi nhập lại. Ô để trống hoặc bằng giá tự tính thì dùng giá tự tính.</div>
+      <div class="field-row"><button class="btn-outline" style="width:100%" onclick="cpExport()"><i class="ti ti-download"></i>Tải file giá CTV</button><button class="btn-outline cp-edit" style="width:100%" onclick="$('cp-file').click()"><i class="ti ti-upload"></i>Nhập file giá CTV</button></div>
+      <input type="file" id="cp-file" accept=".xlsx,.csv,text/csv,.txt" onchange="cpPick(this)" hidden>
+      <div id="cp-preview"></div>
+    </div>
+    <input id="cp-search" placeholder="Tìm khách sạn" oninput="cpRenderList()" style="margin:10px 0 8px">
+    <div id="cp-list"></div>
+    <div id="cp-detail"></div>
+  </div>
+
   <div class="card set-page" data-page="audit">
     <div class="sec-title"><i class="ti ti-history"></i>Nhật ký thao tác</div>
     <div style="font-size:12.5px;color:#5B7285;line-height:1.5;margin-bottom:10px">Ai làm gì, lúc nào: tạo, sửa, hủy, xóa đơn, đổi giá net, hoa hồng, phiếu thu, tài khoản. Đơn bị xóa vẫn giữ bản lưu trong nhật ký.</div>
@@ -702,7 +727,7 @@ function applyPerms(){
   show(q('.sb-item[data-tab="customers"]'),can("customer.create")||can("customer.view_all")||can("customer.edit"));
   show(q('.sb-item[data-tab="debt"]'),can("debt.view"));
   show(q('.sb-item[data-tab="stats"]'),can("stats.view"));
-  const need={cats:"settings.edit",units:"settings.edit",partners:"settings.edit",hotels:"settings.edit",rates:"rates.view",note:"settings.edit",import:"import.run",data:"data.export",ctv:"ctv.manage"};
+  const need={cats:"settings.edit",units:"settings.edit",partners:"settings.edit",hotels:"settings.edit",rates:"rates.view",note:"settings.edit",import:"import.run",data:"data.export",ctv:"ctv.manage",ctvprice:"ctv.price"};
   let first="";
   document.querySelectorAll(".sb-sub-item").forEach(b=>{
     const k=b.dataset.sub, ok=(k==="accounts"||k==="audit")?isOwner():k==="password"?!isOwner():can(need[k]);
@@ -876,9 +901,155 @@ function ctvDelete(id){
     catch(e){ toast(e.message,4500); }
   });
 }
+// ---- Giá CTV ----
+let cpData={rule:null,hotels:[],showNet:false}, cpOpen=null, cpPlan=null;
+const cpNum=v=>{ const d=String(v==null?"":v).replace(/\D/g,""); return d?Number(d):null; };
+const cpVnd=n=>n==null?"":Number(n).toLocaleString("vi-VN");
+// Cùng công thức với máy chủ (máy chủ mới là nơi tính thật), chỉ để xem thử
+function cpPrice(net,rule,hr){
+  const type=hr?hr.type:(net<rule.thresh?"pct":"fixed");
+  let num,den;
+  if(type==="pct"){ const bp=Math.round((hr&&hr.type==="pct"?hr.value:rule.pct)*100); num=net*(10000+bp); den=10000; }
+  else { num=net+(hr&&hr.type==="fixed"?hr.value:rule.fixed); den=1; }
+  return Math.ceil(num/(den*rule.round))*rule.round;
+}
+function cpReadRule(){
+  const pct=Number(String($("cp-pct").value).replace(",",".").trim());
+  return {thresh:cpNum($("cp-thresh").value)??NaN,pct,fixed:cpNum($("cp-fixed").value)??NaN,round:cpNum($("cp-round").value)??NaN};
+}
+function cpRuleOk(r){ return Number.isInteger(r.thresh)&&Number.isFinite(r.pct)&&r.pct>=0&&r.pct<=100&&Number.isInteger(r.fixed)&&Number.isInteger(r.round)&&r.round>=1; }
+function cpRuleHint(){
+  const r=cpReadRule(), h=$("cp-hint"), out=$("cp-try-out");
+  if(!cpRuleOk(r)){ h.textContent="Nhập đủ các số để xem công thức."; out.value=""; return; }
+  h.textContent=`Net dưới ${cpVnd(r.thresh)} đ: cộng ${r.pct}%. Net từ ${cpVnd(r.thresh)} đ trở lên: cộng ${cpVnd(r.fixed)} đ mỗi phòng mỗi đêm. Giá được làm tròn lên ${cpVnd(r.round)} đ.`;
+  const t=cpNum($("cp-try").value); out.value=t?cpVnd(cpPrice(t,r,null))+" đ":"";
+}
+async function cpLoad(){
+  if(!can("ctv.price")) return;
+  document.body.classList.toggle("no-cp-edit",!can("ctv.price"));
+  try{ const r=await apiBooking("GET",undefined,"/api/ctv/price"); cpData=r; }
+  catch(e){ $("cp-list").innerHTML='<div class="warn-box">'+esc(e.message)+'</div>'; return; }
+  const r=cpData.rule; $("cp-thresh").value=cpVnd(r.thresh); $("cp-pct").value=String(r.pct).replace(".",","); $("cp-fixed").value=cpVnd(r.fixed); $("cp-round").value=cpVnd(r.round);
+  cpRuleHint(); cpRenderList();
+}
+async function cpSaveRule(){
+  const r=cpReadRule(); if(!cpRuleOk(r)){ toast("Kiểm tra lại các số trong quy tắc",3500); return; }
+  try{ const res=await apiBooking("PUT",{rule:r},"/api/ctv/price"); cpData.rule=res.rule; toast("Đã lưu quy tắc chung"); if(cpOpen) cpOpenHotel(cpOpen); }
+  catch(e){ toast(e.message,4500); }
+}
+function cpRuleLabel(hr){ return hr?(hr.type==="pct"?"luôn +"+String(hr.value).replace(".",",")+"%":"luôn +"+cpVnd(hr.value)+" đ"):""; }
+function cpRenderList(){
+  const q=hkey($("cp-search").value||""), box=$("cp-list");
+  const list=(cpData.hotels||[]).filter(h=>!q||hkey(h.name).includes(q));
+  if(!(cpData.hotels||[]).length){ box.innerHTML='<div class="empty"><i class="ti ti-building"></i>Chưa có bảng giá net nào. Nhập ở Thiết lập, Bảng giá net.</div>'; return; }
+  box.innerHTML=list.map(h=>`<div class="sup-ord" style="cursor:pointer" onclick="cpOpenHotel('${escAttr(h.name).replace(/'/g,"&#39;")}')"><span>${esc(h.name)}${h.rule?`<span class="kind-tag">${esc(cpRuleLabel(h.rule))}</span>`:""}${h.manual?`<span class="kind-tag ctv">${h.manual} dòng nhập tay</span>`:""}</span><span>${h.rows} dòng</span></div>`).join("")||'<div class="empty">Không thấy khách sạn nào</div>';
+}
+async function cpOpenHotel(name){
+  cpOpen=name; const box=$("cp-detail"); box.innerHTML='<div class="empty">Đang tải...</div>';
+  let r; try{ r=await apiBooking("GET",undefined,"/api/ctv/price?hotel="+encodeURIComponent(name)); }catch(e){ box.innerHTML='<div class="warn-box">'+esc(e.message)+'</div>'; return; }
+  cpData.rule=r.rule; cpRenderHotel(r.hotel);
+  box.scrollIntoView({behavior:"smooth",block:"start"});
+}
+function cpRenderHotel(h){
+  const net=cpData.showNet!==false&&h.rows.some(x=>x.net!==undefined);
+  const hr=h.rule, sel=hr?hr.type:"";
+  $("cp-detail").innerHTML=`<div class="card" style="margin:10px 0 0">
+    <div class="sec-title" style="margin-bottom:6px">${esc(h.name)}</div>
+    <div class="field-row"><div><label>Quy tắc của khách sạn này</label><select id="cp-hr" class="cp-edit-in" onchange="cpHrChange()"><option value=""${sel===""?" selected":""}>Dùng quy tắc chung</option><option value="pct"${sel==="pct"?" selected":""}>Luôn cộng theo %</option><option value="fixed"${sel==="fixed"?" selected":""}>Luôn cộng số tiền cố định</option></select></div>
+    <div id="cp-hr-v-wrap" style="${sel?"":"display:none"}"><label id="cp-hr-l">${sel==="pct"?"Cộng (%)":"Cộng (đ/phòng/đêm)"}</label><input id="cp-hr-v" inputmode="decimal" value="${hr?esc(sel==="pct"?String(hr.value).replace(".",","):cpVnd(hr.value)):""}" oninput="cpRowsRecalc()"></div></div>
+    <div style="overflow-x:auto;margin-top:8px"><table class="cp-t"><thead><tr><th>Hạng phòng</th><th>Mùa</th><th>Từ - đến</th>${net?"<th>Net</th><th>Net T7</th>":""}<th>Giá CTV</th><th>Giá CTV T7</th></tr></thead><tbody>
+    ${h.rows.map((x,i)=>`<tr data-i="${i}"><td>${esc(x.room)}</td><td>${esc(x.label)}</td><td>${esc(RT.dmy(x.from))} - ${esc(RT.dmy(x.to))}</td>${net?`<td>${cpVnd(x.net)}</td><td>${x.satNet!=null?cpVnd(x.satNet):""}</td>`:""}
+      <td><input class="cp-in cp-edit-in" data-k="price" inputmode="numeric" value="${x.manual?cpVnd(x.ctv):""}" placeholder="${cpVnd(x.auto)}" oninput="this.value=fmtInput(this.value);cpMark(this)"></td>
+      <td><input class="cp-in cp-edit-in" data-k="sat" inputmode="numeric" value="${x.manualSat?cpVnd(x.ctvSat):""}" placeholder="${x.autoSat!=null?cpVnd(x.autoSat):"như ngày thường"}" oninput="this.value=fmtInput(this.value);cpMark(this)"></td></tr>`).join("")}
+    </tbody></table></div>
+    <div style="font-size:11px;color:#7A8FA0;margin:6px 0">Số mờ là giá tự tính. Gõ số vào ô để nhập tay, xóa ô để về giá tự tính.</div>
+    <button class="btn-main cp-edit" onclick="cpSaveHotel()"><i class="ti ti-device-floppy"></i>Lưu giá CTV khách sạn này</button></div>`;
+  cpDetail=h;
+}
+let cpDetail=null;
+function cpMark(inp){ inp.classList.toggle("cp-manual",!!inp.value); }
+function cpHrChange(){
+  const t=$("cp-hr").value, w=$("cp-hr-v-wrap"); w.style.display=t?"":"none";
+  $("cp-hr-l").textContent=t==="pct"?"Cộng (%)":"Cộng (đ/phòng/đêm)"; $("cp-hr-v").value=""; cpRowsRecalc();
+}
+function cpHotelRule(){
+  const t=$("cp-hr").value; if(!t) return null;
+  const raw=$("cp-hr-v").value;
+  if(t==="pct"){ const v=Number(String(raw).replace(",",".").trim()); return Number.isFinite(v)&&v>=0&&v<=100?{type:"pct",value:v}:undefined; }
+  const v=cpNum(raw); return v==null?undefined:{type:"fixed",value:v};
+}
+// Đổi quy tắc riêng thì cập nhật số mờ (giá tự tính) ngay trên màn hình
+function cpRowsRecalc(){
+  const hr=cpHotelRule(); if(hr===undefined||!cpDetail) return;
+  document.querySelectorAll("#cp-detail tbody tr").forEach(tr=>{
+    const x=cpDetail.rows[+tr.dataset.i]; if(x.net===undefined) return;
+    const p=tr.querySelector('[data-k="price"]'), s=tr.querySelector('[data-k="sat"]');
+    p.placeholder=cpVnd(cpPrice(x.net,cpData.rule,hr));
+    s.placeholder=x.satNet!=null?cpVnd(cpPrice(x.satNet,cpData.rule,hr)):"như ngày thường";
+  });
+}
+async function cpSaveHotel(){
+  const hr=cpHotelRule(); if(hr===undefined){ toast("Nhập số cho quy tắc riêng của khách sạn",3500); return; }
+  const over=[];
+  document.querySelectorAll("#cp-detail tbody tr").forEach(tr=>{
+    const x=cpDetail.rows[+tr.dataset.i], price=cpNum(tr.querySelector('[data-k="price"]').value), sat=cpNum(tr.querySelector('[data-k="sat"]').value);
+    if(price!=null||sat!=null) over.push({room:x.room,from:x.from,to:x.to,price,sat});
+  });
+  try{
+    const r=await apiBooking("PUT",{hotel:cpDetail.name,rule:hr,over},"/api/ctv/price");
+    toast("Đã lưu giá CTV"); cpRenderHotel(r.hotel);
+    const h=cpData.hotels.find(x=>hkey(x.name)===hkey(cpDetail.name)); if(h){ h.rule=r.hotel.rule; h.manual=r.hotel.rows.filter(x=>x.manual||x.manualSat).length; cpRenderList(); }
+  }catch(e){ toast(e.message,4500); }
+}
+const CP_HEAD=["Khách sạn","Hạng phòng","Tên mùa","Từ ngày","Đến ngày","Giá net 1 đêm (tham khảo)","Giá net đêm thứ 7 (tham khảo)","Giá CTV 1 đêm","Giá CTV đêm thứ 7"];
+async function cpExport(){
+  let r; try{ r=await apiBooking("GET",undefined,"/api/ctv/price?export=1"); }catch(e){ toast(e.message,4500); return; }
+  if(!r.rows.length){ toast("Chưa có bảng giá net để xuất",3500); return; }
+  const rows=[CP_HEAD].concat(r.rows.map(x=>[x.hotel,x.room,x.label,RT.dmy(x.from),RT.dmy(x.to),r.showNet&&x.net!=null?x.net:"",r.showNet&&x.satNet!=null?x.satNet:"",x.ctv,x.ctvSat==null?"":x.ctvSat]));
+  const sheets=[{name:"Giá CTV",rows,widths:[30,28,16,13,13,18,18,16,16],textCols:[0,1,2,3,4]},
+    guideSheet("CÁCH SỬA FILE GIÁ CTV",[
+      "Mỗi dòng là một hạng phòng trong một mùa. Chỉ sửa hai cột cuối: Giá CTV 1 đêm và Giá CTV đêm thứ 7. Đừng sửa khách sạn, hạng phòng, ngày vì app dùng chúng để tìm đúng dòng.",
+      "Giá CTV là số nguyên, ví dụ 1250000. Để trống hoặc giữ đúng số tự tính thì app dùng công thức, giá net đổi thì giá CTV đổi theo.",
+      "Nhập số khác số tự tính thì app giữ số đó (nhập tay) cho tới khi bạn đổi.",
+      "Sửa xong, lưu file rồi vào Thiết lập, Giá CTV, bấm Nhập file giá CTV."])];
+  downloadXlsx(XR.build(sheets),"serene-gia-ctv.xlsx");
+}
+async function cpPick(inp){
+  const f=inp.files&&inp.files[0]; cpPlan=null; $("cp-preview").innerHTML=""; if(!f) return;
+  let table; try{ table=await readTableFile(f); }catch(e){ $("cp-preview").innerHTML='<div class="warn-box">'+esc(e.message)+'</div>'; return; }
+  const head=(table[0]||[]).map(c=>String(c||"").trim().replace(/^﻿/,"")), ix=k=>head.indexOf(k);
+  for(const k of ["Khách sạn","Hạng phòng","Từ ngày","Đến ngày","Giá CTV 1 đêm"]) if(ix(k)<0){ $("cp-preview").innerHTML='<div class="warn-box">Thiếu cột "'+esc(k)+'". Hãy dùng file tải từ nút Tải file giá CTV.</div>'; return; }
+  const items=[], bad=[];
+  table.slice(1).forEach((r,n)=>{
+    if(!r.some(c=>String(c||"").trim())) return;
+    const g=k=>ix(k)<0?"":String(r[ix(k)]==null?"":r[ix(k)]).trim(), line=n+2;
+    const from=RT.parseDmy(g("Từ ngày")), to=RT.parseDmy(g("Đến ngày"));
+    if(!g("Khách sạn")||!g("Hạng phòng")||!from||!to){ bad.push("Dòng "+line+": thiếu khách sạn, hạng phòng hoặc ngày sai dạng dd/mm/yyyy"); return; }
+    const num=v=>{ if(v==="") return null; if(!/^\d[\d.,\s]*$/.test(v)) return NaN; return parseInt(v.replace(/[.,\s]/g,""),10); };
+    const price=num(g("Giá CTV 1 đêm")), sat=num(g("Giá CTV đêm thứ 7"));
+    if(Number.isNaN(price)||Number.isNaN(sat)){ bad.push("Dòng "+line+": giá CTV phải là số"); return; }
+    items.push({line,hotel:g("Khách sạn"),room:g("Hạng phòng"),from,to,price,sat});
+  });
+  cpPlan={items};
+  $("cp-preview").innerHTML=`<div class="card" style="margin:8px 0 0;padding:10px 12px"><div style="font-size:13px"><b>${items.length}</b> dòng giá${bad.length?` · <b>${bad.length}</b> dòng lỗi sẽ bị bỏ qua`:""}</div>
+    ${bad.length?`<div class="warn-box" style="margin-top:8px">${bad.slice(0,8).map(esc).join("<br>")}${bad.length>8?"<br>...":""}</div>`:""}
+    ${items.length?`<button class="btn-main" style="margin-top:10px" onclick="cpRun()"><i class="ti ti-file-import"></i>Nhập ${items.length} dòng</button>`:""}</div>`;
+}
+function cpRun(){
+  if(!cpPlan||!cpPlan.items.length) return;
+  const items=cpPlan.items;
+  askConfirm(`Nhập giá CTV của <b>${items.length}</b> dòng?<div class="pay-modal-sub">Dòng có giá khác giá tự tính sẽ thành giá nhập tay. Dòng để trống hoặc bằng giá tự tính sẽ về giá tự tính.</div>`,async()=>{
+    const box=$("cp-preview"); cpPlan=null;
+    try{
+      const r=await apiBooking("POST",{items},"/api/ctv/price/import");
+      box.innerHTML=`<div class="card" style="margin:8px 0 0;padding:10px 12px"><div style="font-size:13px">Đã cập nhật <b>${r.hotels}</b> khách sạn: <b>${r.set}</b> dòng nhập tay, <b>${r.cleared}</b> dòng về tự tính.</div>${r.errorCount?`<div class="warn-box" style="margin-top:8px"><b>${r.errorCount} dòng chưa nhập được:</b><br>${r.errors.slice(0,10).map(e=>(e.line?"Dòng "+e.line+": ":"")+esc(e.msg)).join("<br>")}${r.errorCount>10?"<br>...":""}</div>`:""}</div>`;
+      $("cp-file").value=""; await cpLoad(); if(cpOpen) cpOpenHotel(cpOpen);
+    }catch(e){ box.innerHTML='<div class="warn-box">'+esc(e.message)+'</div>'; }
+  });
+}
 // ---- Nhật ký thao tác (chỉ Chủ) ----
 let auditLast=0;
-const AUDIT_LBL={"order.create":"Tạo đơn","order.update":"Sửa đơn","order.delete":"Xóa đơn","customer.create":"Thêm khách","customer.update":"Sửa khách","customer.delete":"Xóa khách","lead.create":"Thêm lead","lead.assign":"Giao lead","lead.delete":"Xóa lead","staff.create":"Tạo tài khoản","staff.update":"Sửa tài khoản","staff.password":"Đổi mật khẩu","ctv.approve":"Duyệt CTV","ctv.lock":"Khóa CTV","ctv.unlock":"Mở khóa CTV","ctv.password":"Đặt lại mật khẩu CTV","ctv.delete":"Xóa CTV","login":"Đăng nhập"};
+const AUDIT_LBL={"order.create":"Tạo đơn","order.update":"Sửa đơn","order.delete":"Xóa đơn","customer.create":"Thêm khách","customer.update":"Sửa khách","customer.delete":"Xóa khách","lead.create":"Thêm lead","lead.assign":"Giao lead","lead.delete":"Xóa lead","staff.create":"Tạo tài khoản","staff.update":"Sửa tài khoản","staff.password":"Đổi mật khẩu","ctv.approve":"Duyệt CTV","ctv.lock":"Khóa CTV","ctv.unlock":"Mở khóa CTV","ctv.password":"Đặt lại mật khẩu CTV","ctv.delete":"Xóa CTV","ctv.rule":"Sửa quy tắc giá CTV","ctv.price":"Sửa giá CTV","ctv.import":"Nhập file giá CTV","login":"Đăng nhập"};
 async function auditLoad(reset){
   if(!isOwner()) return;
   if(reset){ auditLast=0; $("au-list").innerHTML=""; }
@@ -1011,7 +1182,7 @@ function switchTab(tab,sub){
   if(tab==="leads") renderLeads();
   if(tab==="customers") renderCustomers();
   if(tab==="debt") renderDebt();
-  if(tab==="settings"){ renderSettings(); if(curSub==="accounts") accLoad(); if(curSub==="ctv") ctvLoad(); if(curSub==="audit") auditLoad(true); }
+  if(tab==="settings"){ renderSettings(); if(curSub==="accounts") accLoad(); if(curSub==="ctv") ctvLoad(); if(curSub==="ctvprice") cpLoad(); if(curSub==="audit") auditLoad(true); }
 }
 function applySub(){
   const on=curTab==="settings"&&subOpen;
