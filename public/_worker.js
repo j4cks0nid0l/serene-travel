@@ -656,6 +656,10 @@ async function ensureQuickTables(env){
  if(!p){
   p=(async()=>{
    await env.DB.prepare('CREATE TABLE IF NOT EXISTS quick_msgs (id TEXT PRIMARY KEY, grp TEXT NOT NULL DEFAULT \'\', title TEXT NOT NULL, body TEXT NOT NULL, created TEXT NOT NULL, updated TEXT NOT NULL)').run();
+   // Cột sec = Mục (tầng 1), grp = Nhóm (tầng 2). Bảng cũ chỉ có grp thì chuyển grp cũ lên làm Mục.
+   let added=false;
+   try{await env.DB.prepare('ALTER TABLE quick_msgs ADD COLUMN sec TEXT NOT NULL DEFAULT \'\'').run();added=true}catch(e){if(!/duplicate column/i.test(String(e&&e.message||e)))throw e}
+   if(added)await env.DB.prepare('UPDATE quick_msgs SET sec=grp, grp=\'\' WHERE grp<>\'\'').run();
    await env.DB.prepare('CREATE TABLE IF NOT EXISTS quick_photos (id TEXT PRIMARY KEY, album TEXT NOT NULL, label TEXT NOT NULL DEFAULT \'\', url TEXT NOT NULL, created TEXT NOT NULL)').run();
   })();
   quickReady.set(env.DB,p);
@@ -669,34 +673,53 @@ async function quickApi(req,env,path){
  if(!env.DB)return json({error:'Chưa kết nối cơ sở dữ liệu.'},503);
  await ensureQuickTables(env);
  const now=new Date().toISOString();
- const m=/^\/api\/quick(?:\/(msg|photo)(?:\/([A-Za-z0-9]{6,30}))?)?$/.exec(path);
+ const m=/^\/api\/quick(?:\/(msg|photo|rename|group)(?:\/([A-Za-z0-9]{6,30}))?)?$/.exec(path);
  if(!m)return json({error:'Không tìm thấy.'},404);
  const kind=m[1],id=m[2];
  if(!kind){
   if(req.method!=='GET')return json({error:'Không hỗ trợ.'},405);
-  const msgs=await env.DB.prepare('SELECT id,grp,title,body,updated FROM quick_msgs ORDER BY grp COLLATE NOCASE, title COLLATE NOCASE LIMIT 600').all();
+  const msgs=await env.DB.prepare('SELECT id,sec,grp,title,body,updated FROM quick_msgs ORDER BY sec COLLATE NOCASE, grp COLLATE NOCASE, title COLLATE NOCASE LIMIT 600').all();
   const photos=await env.DB.prepare('SELECT id,album,label,url,created FROM quick_photos ORDER BY album COLLATE NOCASE, created DESC LIMIT 3000').all();
   return json({msgs:msgs.results,photos:photos.results});
  }
  let data={};
  if(req.method==='POST'||req.method==='PUT'){try{data=await req.json()}catch{return json({error:'Dữ liệu không hợp lệ.'},400)}}
  const newId=()=>'Q'+crypto.randomUUID().replace(/-/g,'').slice(0,16);
+ if(kind==='rename'){
+  if(req.method!=='POST')return json({error:'Không hỗ trợ.'},405);
+  const sec=quickClean(data.sec,40),from=quickClean(data.from,40),to=quickClean(data.to,40);
+  if(!to)return json({error:'Nhập tên mới.'},400);
+  if(data.level==='sec')await env.DB.prepare('UPDATE quick_msgs SET sec=?,updated=? WHERE sec=?').bind(to,now,from).run();
+  else if(data.level==='grp')await env.DB.prepare('UPDATE quick_msgs SET grp=?,updated=? WHERE sec=? AND grp=?').bind(to,now,sec,from).run();
+  else return json({error:'Dữ liệu không hợp lệ.'},400);
+  return json({ok:true});
+ }
+ if(kind==='group'){
+  if(req.method!=='POST')return json({error:'Không hỗ trợ.'},405);
+  const sec=quickClean(data.sec,40),grp=quickClean(data.grp,40);
+  if(!sec)return json({error:'Thiếu tên mục.'},400);
+  if(data.level==='sec')await env.DB.prepare('DELETE FROM quick_msgs WHERE sec=?').bind(sec).run();
+  else if(data.level==='grp')await env.DB.prepare('DELETE FROM quick_msgs WHERE sec=? AND grp=?').bind(sec,grp).run();
+  else return json({error:'Dữ liệu không hợp lệ.'},400);
+  return json({ok:true});
+ }
  if(kind==='msg'){
-  const grp=quickClean(data.grp,40),title=quickClean(data.title,80),body=quickClean(data.body,4000);
+  const sec=quickClean(data.sec,40),grp=quickClean(data.grp,40),title=quickClean(data.title,80),body=quickClean(data.body,4000);
+  if((req.method==='POST'||req.method==='PUT')&&!sec)return json({error:'Nhập tên mục.'},400);
   if(req.method==='POST'){
    if(!title||!body)return json({error:'Nhập tên mẫu và nội dung.'},400);
    const c=await env.DB.prepare('SELECT COUNT(*) n FROM quick_msgs').first();
    if(c.n>=500)return json({error:'Đã đủ 500 mẫu, hãy xóa bớt mẫu cũ.'},400);
    const nid=newId();
-   await env.DB.prepare('INSERT INTO quick_msgs (id,grp,title,body,created,updated) VALUES (?,?,?,?,?,?)').bind(nid,grp,title,body,now,now).run();
-   return json({msg:{id:nid,grp,title,body,updated:now}},201);
+   await env.DB.prepare('INSERT INTO quick_msgs (id,sec,grp,title,body,created,updated) VALUES (?,?,?,?,?,?,?)').bind(nid,sec,grp,title,body,now,now).run();
+   return json({msg:{id:nid,sec,grp,title,body,updated:now}},201);
   }
   if(!id)return json({error:'Thiếu mã mẫu.'},400);
   if(req.method==='PUT'){
    if(!title||!body)return json({error:'Nhập tên mẫu và nội dung.'},400);
-   const r=await env.DB.prepare('UPDATE quick_msgs SET grp=?,title=?,body=?,updated=? WHERE id=?').bind(grp,title,body,now,id).run();
+   const r=await env.DB.prepare('UPDATE quick_msgs SET sec=?,grp=?,title=?,body=?,updated=? WHERE id=?').bind(sec,grp,title,body,now,id).run();
    if(!r.meta.changes)return json({error:'Không tìm thấy mẫu.'},404);
-   return json({msg:{id,grp,title,body,updated:now}});
+   return json({msg:{id,sec,grp,title,body,updated:now}});
   }
   if(req.method==='DELETE'){await env.DB.prepare('DELETE FROM quick_msgs WHERE id=?').bind(id).run();return json({ok:true})}
   return json({error:'Không hỗ trợ.'},405);
