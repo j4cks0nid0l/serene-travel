@@ -146,7 +146,7 @@ async function publicLead(req,env){
   return json({ok:true},201)
  }catch(e){return json({error:'Chưa ghi nhận được. Vui lòng nhắn Zalo cho Serene.'},503)}
 }
-async function crmApi(req,env,path){
+async function crmApi(req,env,path,actor){
  // Trả về null nếu không phải đường dẫn khách hàng/lead
  const m=/^\/api\/(customers|leads)(?:\/([a-z0-9]{4,26}))?$/.exec(path);if(!m)return null;
  const kind=m[1],id=m[2];
@@ -154,28 +154,46 @@ async function crmApi(req,env,path){
  const table=kind,isCustomer=kind==='customers',clean=isCustomer?cleanCustomer:cleanLead;
  const missing=e=>/no such table/i.test(String(e?.message||e));
  try{
-  if(!id&&req.method==='GET'){const {results}=await env.BOOKINGS.prepare('SELECT * FROM '+table+' ORDER BY created').all();return json({[kind]:results})}
+  await ensureAuthTables(env);
+  const mine=r=>actor.owner||can(actor,isCustomer?'customer.view_all':'lead.view_all')||r.owner===actor.id;
+  if(!id&&req.method==='GET'){
+   let sql='SELECT * FROM '+table,args=[];
+   if(!isCustomer&&!can(actor,'lead.view_all')){sql+=' WHERE owner=?';args=[actor.id]}
+   if(isCustomer&&!can(actor,'customer.view_all')){sql+=" WHERE owner=? OR kind='ctv'";args=[actor.id]}
+   const {results}=await env.BOOKINGS.prepare(sql+' ORDER BY created').bind(...args).all();return json({[kind]:results})}
   if(!id&&req.method==='POST'){
+   if(!can(actor,isCustomer?'customer.create':'lead.edit'))return noPerm();
    if(Number(req.headers.get('content-length')||0)>20000)return json({error:'Dữ liệu quá lớn.'},413);
    let input;try{input=await req.json()}catch{return json({error:'Nội dung không hợp lệ.'},400)}
    const d=clean(input);if(!d)return json({error:isCustomer?'Thông tin khách hàng không hợp lệ.':'Thông tin lead không hợp lệ.'},400);
    const cnt=await env.BOOKINGS.prepare('SELECT COUNT(*) AS n FROM '+table).first();if((cnt?.n||0)>=20000)return json({error:'Đã đạt giới hạn số lượng.'},400);
-   const now=new Date().toISOString(),nid=newCrmId(isCustomer?'c':'l');
-   if(isCustomer)await env.BOOKINGS.prepare('INSERT INTO customers(id,name,phone,kind,note,created,updated) VALUES(?,?,?,?,?,?,?)').bind(nid,d.name,d.phone,d.kind,d.note,now,now).run();
-   else await env.BOOKINGS.prepare('INSERT INTO leads(id,name,phone,need,source,status,booking_id,created,updated) VALUES(?,?,?,?,?,?,?,?,?)').bind(nid,d.name,d.phone,d.need,d.source,d.status,d.booking_id,now,now).run();
+   const now=new Date().toISOString(),nid=newCrmId(isCustomer?'c':'l'),own=actor.owner?'':actor.id;
+   if(isCustomer)await env.BOOKINGS.prepare('INSERT INTO customers(id,name,phone,kind,note,created,updated,owner) VALUES(?,?,?,?,?,?,?,?)').bind(nid,d.name,d.phone,d.kind,d.note,now,now,own).run();
+   else await env.BOOKINGS.prepare('INSERT INTO leads(id,name,phone,need,source,status,booking_id,created,updated,owner) VALUES(?,?,?,?,?,?,?,?,?,?)').bind(nid,d.name,d.phone,d.need,d.source,d.status,d.booking_id,now,now,own).run();
+   if(isCustomer)await logAudit(env,actor,'customer.create',nid,d.name+(d.kind==='ctv'?' (CTV)':''));
    const row=await env.BOOKINGS.prepare('SELECT * FROM '+table+' WHERE id=?').bind(nid).first();return json({[isCustomer?'customer':'lead']:row},201)}
   if(id&&req.method==='PUT'){
    if(Number(req.headers.get('content-length')||0)>20000)return json({error:'Dữ liệu quá lớn.'},413);
    let input;try{input=await req.json()}catch{return json({error:'Nội dung không hợp lệ.'},400)}
    const d=clean(input);if(!d)return json({error:isCustomer?'Thông tin khách hàng không hợp lệ.':'Thông tin lead không hợp lệ.'},400);
-   const old=await env.BOOKINGS.prepare('SELECT id FROM '+table+' WHERE id=?').bind(id).first();if(!old)return json({error:'Không tìm thấy.'},404);
+   const old=await env.BOOKINGS.prepare('SELECT * FROM '+table+' WHERE id=?').bind(id).first();if(!old||!mine(old))return json({error:'Không tìm thấy.'},404);
+   if(!can(actor,isCustomer?'customer.edit':'lead.edit'))return noPerm();
    const now=new Date().toISOString();
    if(isCustomer)await env.BOOKINGS.prepare('UPDATE customers SET name=?,phone=?,kind=?,note=?,updated=? WHERE id=?').bind(d.name,d.phone,d.kind,d.note,now,id).run();
    else await env.BOOKINGS.prepare('UPDATE leads SET name=?,phone=?,need=?,source=?,status=?,booking_id=?,updated=? WHERE id=?').bind(d.name,d.phone,d.need,d.source,d.status,d.booking_id,now,id).run();
+   let assigned=null;
+   if(!isCustomer&&Object.prototype.hasOwnProperty.call(input,'owner')&&can(actor,'lead.assign')){
+    const want=typeof input.owner==='string'?input.owner:'';
+    if(want!==''){const st=await env.BOOKINGS.prepare('SELECT id,name FROM staff WHERE id=? AND active=1').bind(want).first();if(!st)return json({error:'Nhân viên được giao không tồn tại hoặc đã tắt.'},400);assigned=st.name}
+    if(want!==old.owner){await env.BOOKINGS.prepare('UPDATE leads SET owner=? WHERE id=?').bind(want,id).run();await logAudit(env,actor,'lead.assign',id,d.name+' -> '+(assigned||'Chủ'))}
+   }
+   if(isCustomer&&(old.name!==d.name||old.phone!==d.phone||old.kind!==d.kind||old.note!==d.note))await logAudit(env,actor,'customer.update',id,old.name+(old.name!==d.name?' -> '+d.name:'')+(old.phone!==d.phone?'; SĐT '+old.phone+' -> '+d.phone:'')+(old.kind!==d.kind?'; loại '+old.kind+' -> '+d.kind:''));
    const row=await env.BOOKINGS.prepare('SELECT * FROM '+table+' WHERE id=?').bind(id).first();return json({[isCustomer?'customer':'lead']:row})}
   if(id&&req.method==='DELETE'){
+   if(!can(actor,isCustomer?'customer.delete':'lead.delete'))return noPerm();
+   const old=await env.BOOKINGS.prepare('SELECT * FROM '+table+' WHERE id=?').bind(id).first();if(old&&!mine(old))return json({error:'Không tìm thấy.'},404);
    if(isCustomer){const used=await env.BOOKINGS.prepare('SELECT id FROM bookings WHERE data LIKE ? OR data LIKE ? LIMIT 1').bind('%"customerId":"'+id+'"%','%"ctvId":"'+id+'"%').first();if(used)return json({error:'Khách này đã có đơn hoặc hoa hồng nên chưa xóa được.'},409)}
-   await env.BOOKINGS.prepare('DELETE FROM '+table+' WHERE id=?').bind(id).run();return json({ok:true})}
+   await env.BOOKINGS.prepare('DELETE FROM '+table+' WHERE id=?').bind(id).run();if(old)await logAudit(env,actor,kind.slice(0,-1)+'.delete',id,old.name+(old.phone?' '+old.phone:''));return json({ok:true})}
   return json({error:'Không hỗ trợ.'},405)
  }catch(e){if(missing(e))return json({error:'Chưa tạo bảng '+table+' trong kho đơn hàng. Chạy phần mới của schema-bookings.sql trong tab Console của D1.'},503);return json({error:'Chưa xử lý được yêu cầu.'},500)}
 }
@@ -308,6 +326,329 @@ async function machineApi(req,env,path,u){
      return json({ok:true})}}
   return json({error:'Không hỗ trợ.'},404)
  }catch(e){return json({error:'Chưa xử lý được yêu cầu.'},500)}}
+// ---- Tài khoản nhân viên, phân quyền, nhật ký thao tác ----
+// Chủ (đăng nhập bằng ADMIN_PASSWORD_HASH) luôn có mọi quyền. Nhân viên lưu trong bảng staff của kho đơn hàng.
+// Mọi kiểm tra quyền làm ở máy chủ: giao diện chỉ ẩn nút cho gọn, không phải lớp bảo vệ.
+const PERM_CATALOG=[
+ ['Đơn hàng','order.view_all','Xem đơn của mọi người (không bật thì chỉ thấy đơn mình tạo)'],
+ ['Đơn hàng','order.create','Tạo đơn'],
+ ['Đơn hàng','order.edit','Sửa đơn đang xử lý'],
+ ['Đơn hàng','order.edit_done','Sửa đơn đã Thành công hoặc Hủy'],
+ ['Đơn hàng','order.complete','Bấm Thành công (và đưa đơn Thành công về lại)'],
+ ['Đơn hàng','order.cancel','Bấm Hủy'],
+ ['Đơn hàng','order.delete_request','Gửi yêu cầu xóa đơn'],
+ ['Đơn hàng','order.delete_approve','Duyệt yêu cầu xóa và xóa đơn'],
+ ['Giá net','net.access','Xem và nhập giá net, chọn đối tác'],
+ ['Tiền thu','pay.record','Ghi nhận thu tiền (khoản của người không có quyền duyệt sẽ ở trạng thái Chờ duyệt)'],
+ ['Tiền thu','pay.approve','Duyệt phiếu thu Chờ duyệt, sửa hoặc xóa phiếu thu đã có'],
+ ['Tiền thu','pay.refund','Ghi nhận hoàn tiền (số tiền âm)'],
+ ['Hoa hồng và đối tác','commission.edit','Nhập hoa hồng CTV'],
+ ['Hoa hồng và đối tác','commission.pay','Đánh dấu đã trả hoa hồng'],
+ ['Hoa hồng và đối tác','supplier.pay','Đánh dấu đã trả đối tác'],
+ ['Khách hàng','customer.view_all','Xem khách của mọi người'],
+ ['Khách hàng','customer.create','Thêm khách và CTV'],
+ ['Khách hàng','customer.edit','Sửa khách (của mình, hoặc của mọi người nếu có quyền xem tất cả)'],
+ ['Khách hàng','customer.delete','Xóa khách'],
+ ['Lead','lead.view_all','Xem lead của mọi người, gồm lead từ website'],
+ ['Lead','lead.assign','Giao lead cho nhân viên'],
+ ['Lead','lead.edit','Thêm và sửa lead của mình'],
+ ['Lead','lead.delete','Xóa lead'],
+ ['Báo cáo','debt.view','Xem công nợ khách và đối tác'],
+ ['Báo cáo','stats.view','Xem thống kê'],
+ ['Báo cáo','data.export','Xuất dữ liệu ra file'],
+ ['Thiết lập','rates.view','Xem bảng giá net khách sạn'],
+ ['Thiết lập','rates.edit','Sửa bảng giá net khách sạn'],
+ ['Thiết lập','settings.edit','Sửa đối tác, danh mục, đơn vị và thiết lập chung'],
+ ['Thiết lập','import.run','Nhập dữ liệu từ file Excel']
+];
+const PERM_KEYS=PERM_CATALOG.map(x=>x[1]);
+const OWNER_ONLY_PERMS=['staff.manage','audit.view'];
+const ROLE_PERMS={
+ accountant:['order.view_all','order.create','order.edit','order.edit_done','order.complete','order.cancel','order.delete_approve','net.access','pay.record','pay.approve','pay.refund','commission.edit','commission.pay','supplier.pay','customer.view_all','customer.create','customer.edit','lead.view_all','lead.assign','lead.edit','debt.view','stats.view','data.export','rates.view','rates.edit','settings.edit','import.run'],
+ sales:['order.create','order.edit','order.cancel','order.delete_request','net.access','pay.record','commission.edit','customer.create','customer.edit','lead.edit','stats.view','rates.view']
+};
+const ROLE_LABELS={owner:'Chủ',accountant:'Kế toán',sales:'Sales',custom:'Tùy chỉnh'};
+const OWNER_ACTOR_ID='owner';
+function ownerActor(email,csrf,token){return {id:OWNER_ACTOR_ID,owner:true,email,name:'Chủ',role:'owner',perms:[...PERM_KEYS,...OWNER_ONLY_PERMS],csrf,token}}
+function can(actor,perm){return !!actor&&(actor.owner===true||actor.perms.includes(perm))}
+const noPerm=(msg)=>json({error:msg||'Tài khoản này chưa được cấp quyền làm việc này.'},403);
+const authReady=new WeakMap();
+async function ensureAuthTables(env){
+ if(!env.BOOKINGS)return;
+ let p=authReady.get(env.BOOKINGS);
+ if(!p){
+  p=(async()=>{
+   const run=sql=>env.BOOKINGS.prepare(sql).run();
+   await run('CREATE TABLE IF NOT EXISTS staff (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL UNIQUE, role TEXT NOT NULL, perms TEXT NOT NULL, hash TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, created TEXT NOT NULL, updated TEXT NOT NULL)');
+   await run('CREATE TABLE IF NOT EXISTS staff_sessions (token TEXT PRIMARY KEY, csrf TEXT NOT NULL, expires INTEGER NOT NULL, staff_id TEXT NOT NULL)');
+   await run('CREATE TABLE IF NOT EXISTS audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, actor TEXT NOT NULL, actor_name TEXT NOT NULL, action TEXT NOT NULL, target TEXT NOT NULL DEFAULT \'\', detail TEXT NOT NULL DEFAULT \'\')');
+   await run('CREATE INDEX IF NOT EXISTS audit_at ON audit_log(at)');
+   for(const t of ['customers','leads']){try{await run('ALTER TABLE '+t+' ADD COLUMN owner TEXT NOT NULL DEFAULT \'\'')}catch(e){if(!/duplicate column|no such table/i.test(String(e?.message||e)))throw e}}
+  })();
+  authReady.set(env.BOOKINGS,p);
+  p.catch(()=>authReady.delete(env.BOOKINGS));
+ }
+ await p;
+}
+async function makePasswordHash(pass){
+ const salt=hex(crypto.getRandomValues(new Uint8Array(24))),key=await crypto.subtle.importKey('raw',enc.encode(pass),'PBKDF2',false,['deriveBits']);
+ const digest=await crypto.subtle.deriveBits({name:'PBKDF2',hash:'SHA-256',salt:enc.encode(salt),iterations:100000},key,256);
+ return salt+':'+hex(digest)
+}
+function cleanPerms(list){return Array.isArray(list)?PERM_KEYS.filter(k=>list.includes(k)):null}
+function staffView(r){let perms=[];try{perms=JSON.parse(r.perms)}catch{}return {id:r.id,name:r.name,email:r.email,role:r.role,perms,active:!!r.active,created:r.created,updated:r.updated}}
+// Tìm người đang đăng nhập: Chủ (bảng sessions) hoặc nhân viên (bảng staff_sessions)
+async function resolveActor(req,env){
+ const token=cookie(req);if(!token)return null;const th=await sha(token);
+ const own=await env.DB.prepare('SELECT csrf,expires FROM sessions WHERE token=?').bind(th).first();
+ if(own)return own.expires<Date.now()?null:ownerActor(EMAIL,own.csrf,th);
+ if(!env.BOOKINGS)return null;
+ try{
+  await ensureAuthTables(env);
+  const r=await env.BOOKINGS.prepare('SELECT s.csrf,s.expires,t.id,t.name,t.email,t.role,t.perms,t.active FROM staff_sessions s JOIN staff t ON t.id=s.staff_id WHERE s.token=?').bind(th).first();
+  if(!r||r.expires<Date.now()||!r.active)return null;
+  let perms=[];try{perms=cleanPerms(JSON.parse(r.perms))||[]}catch{}
+  return {id:r.id,owner:false,email:r.email,name:r.name,role:r.role,perms,csrf:r.csrf,token:th}
+ }catch{return null}
+}
+async function logAudit(env,actor,action,target,detail){
+ try{
+  await ensureAuthTables(env);
+  await env.BOOKINGS.prepare('INSERT INTO audit_log(at,actor,actor_name,action,target,detail) VALUES(?,?,?,?,?,?)').bind(new Date().toISOString(),actor.id,actor.name+(actor.owner?'':' ('+(ROLE_LABELS[actor.role]||actor.role)+')'),action,String(target||'').slice(0,60),String(detail||'').slice(0,4000)).run()
+ }catch{}
+}
+// So sánh nội dung bất kể thứ tự khóa
+function canon(v){if(Array.isArray(v))return '['+v.map(canon).join(',')+']';if(v&&typeof v==='object')return '{'+Object.keys(v).sort().filter(k=>v[k]!==undefined).map(k=>JSON.stringify(k)+':'+canon(v[k])).join(',')+'}';return JSON.stringify(v===undefined?null:v)}
+const ost=b=>BOOKING_ORDER_STATUSES.includes(b?.orderStatus)?b.orderStatus:'success';
+const NET_KEYS=['netPrice','totalNet','partnerId','partner'];
+function svcNetPart(s){const o={};for(const k of NET_KEYS)if(s[k]!==undefined)o[k]=s[k];if(Array.isArray(s.lines))o.lines=s.lines.map(l=>({netPrice:l?.netPrice,totalNet:l?.totalNet}));return o}
+function stripNet(b){
+ for(const s of b.svcs||[]){for(const k of NET_KEYS)delete s[k];if(Array.isArray(s.lines))for(const l of s.lines){delete l.netPrice;delete l.totalNet}}
+ delete b.supPaid;return b
+}
+// Người không có quyền net gửi lại đơn đã bị ẩn giá net: đặt lại giá net cũ theo từng dịch vụ để không bị mất
+function restoreNet(old,nu){
+ delete nu.supPaid;if(old.supPaid!==undefined)nu.supPaid=old.supPaid;
+ (nu.svcs||[]).forEach((s,i)=>{
+  for(const k of NET_KEYS)delete s[k];
+  if(Array.isArray(s.lines))for(const l of s.lines){delete l.netPrice;delete l.totalNet}
+  const o=old.svcs?.[i];if(!o||o.name!==s.name)return;
+  for(const k of NET_KEYS)if(o[k]!==undefined)s[k]=o[k];
+  if(Array.isArray(s.lines)&&Array.isArray(o.lines)&&s.lines.length===o.lines.length)s.lines.forEach((l,j)=>{if(o.lines[j]?.netPrice!==undefined)l.netPrice=o.lines[j].netPrice;if(o.lines[j]?.totalNet!==undefined)l.totalNet=o.lines[j].totalNet})
+ });
+ return nu
+}
+const netSig=b=>canon((b.svcs||[]).map(svcNetPart));
+const NON_CORE_TOP=['payments','commission','supPaid','deleteReq','orderStatus','sent','status','updatedBy','updatedAt','createdBy','createdByName','owner'];
+function coreSig(b){
+ const c=JSON.parse(JSON.stringify(b));for(const k of NON_CORE_TOP)delete c[k];
+ for(const s of c.svcs||[]){for(const k of NET_KEYS)delete s[k];delete s.code;delete s.sent;if(Array.isArray(s.lines))for(const l of s.lines){delete l.netPrice;delete l.totalNet}}
+ return canon(c)
+}
+const commSig=b=>canon({c:b.commission?.ctvId||'',a:Number(b.commission?.amount)||0});
+const commPaidSig=b=>canon([!!b.commission?.paid,b.commission?.paidDate||'']);
+function summarize(old,nu){
+ const out=[];
+ if(!old)return 'Tạo đơn, tổng '+nu.totalAmt+' đ, trạng thái '+ost(nu);
+ if(ost(old)!==ost(nu))out.push('Trạng thái '+ost(old)+' -> '+ost(nu));
+ if(old.totalAmt!==nu.totalAmt)out.push('Tổng tiền '+old.totalAmt+' -> '+nu.totalAmt);
+ if(netSig(old)!==netSig(nu))out.push('Giá net hoặc đối tác thay đổi');
+ if(commSig(old)!==commSig(nu))out.push('Hoa hồng '+(Number(old.commission?.amount)||0)+' -> '+(Number(nu.commission?.amount)||0));
+ if(commPaidSig(old)!==commPaidSig(nu))out.push('Hoa hồng đã trả: '+(nu.commission?.paid?'có':'không'));
+ const op=old.payments||[],np=nu.payments||[];
+ if(canon(op)!==canon(np))out.push('Phiếu thu '+op.length+' -> '+np.length+' (đã duyệt '+op.filter(p=>p.status!=='pending').reduce((a,p)=>a+p.amount,0)+' -> '+np.filter(p=>p.status!=='pending').reduce((a,p)=>a+p.amount,0)+')');
+ if(canon(old.supPaid||null)!==canon(nu.supPaid||null))out.push('Trả đối tác thay đổi');
+ if(canon(old.deleteReq||null)!==canon(nu.deleteReq||null))out.push(nu.deleteReq?'Yêu cầu xóa':'Gỡ yêu cầu xóa');
+ if(coreSig(old)!==coreSig(nu))out.push('Thông tin đơn hoặc dịch vụ thay đổi');
+ return out.join('; ')||'Lưu lại, không đổi gì quan trọng'
+}
+// Trả về chuỗi lỗi nếu nhân viên không được phép đổi từ old sang nu. Chủ không bị kiểm tra.
+function checkBookingChange(actor,old,nu){
+ const locked=ost(old)!=='processing';
+ // Trạng thái đơn
+ const a=ost(old),b=ost(nu);
+ if(a!==b){
+  if((a==='success'||b==='success')&&!can(actor,'order.complete'))return 'Chỉ Kế toán hoặc Chủ được bấm Thành công hoặc đưa đơn Thành công về lại.';
+  if((a==='cancelled'||b==='cancelled')&&!can(actor,'order.cancel'))return 'Tài khoản này chưa được phép Hủy đơn.'
+ }
+ // Giá net, đối tác
+ const netChanged=netSig(old)!==netSig(nu);
+ if(netChanged&&!can(actor,'net.access'))return 'Tài khoản này chưa được phép nhập giá net.';
+ // Thông tin đơn và dịch vụ
+ const coreChanged=coreSig(old)!==coreSig(nu);
+ if(coreChanged||netChanged){
+  if(locked&&!can(actor,'order.edit_done'))return 'Đơn đã '+(a==='success'?'Thành công':'Hủy')+' nên đã khóa. Chỉ Kế toán hoặc Chủ được sửa.';
+  if(!locked&&!can(actor,'order.edit'))return 'Tài khoản này chưa được phép sửa đơn.'
+ }
+ // Hoa hồng
+ if(commSig(old)!==commSig(nu)){
+  if(!can(actor,'commission.edit'))return 'Tài khoản này chưa được phép nhập hoa hồng.';
+  if(old.commission?.paid&&!can(actor,'commission.pay'))return 'Hoa hồng này đã trả nên chỉ Kế toán hoặc Chủ được sửa.';
+  if(locked&&!can(actor,'order.edit_done'))return 'Đơn đã khóa nên chưa sửa được hoa hồng.'
+ }
+ if(commPaidSig(old)!==commPaidSig(nu)&&!can(actor,'commission.pay'))return 'Chỉ Kế toán hoặc Chủ được đánh dấu đã trả hoa hồng.';
+ if(canon(old.supPaid||null)!==canon(nu.supPaid||null)&&!can(actor,'supplier.pay'))return 'Chỉ Kế toán hoặc Chủ được đánh dấu đã trả đối tác.';
+ // Phiếu thu: sửa hoặc xóa phiếu cũ cần quyền duyệt; thêm phiếu mới cần quyền ghi nhận
+ const op=old.payments||[],np=nu.payments||[];
+ const changedExisting=np.length<op.length||op.some((p,i)=>canon(p)!==canon(np[i]));
+ if(changedExisting&&!can(actor,'pay.approve'))return 'Chỉ Kế toán hoặc Chủ được sửa, xóa hoặc duyệt phiếu thu đã có.';
+ if(np.length>op.length){
+  if(!can(actor,'pay.record'))return 'Tài khoản này chưa được phép ghi nhận thu tiền.';
+  for(const p of np.slice(op.length)){
+   if(p.amount<0&&!can(actor,'pay.refund'))return 'Tài khoản này chưa được phép ghi nhận hoàn tiền.';
+   if(p.status!=='pending'&&!can(actor,'pay.approve'))p.status='pending'
+  }
+ }
+ return null
+}
+// Gắn lại yêu cầu xóa cho đúng dạng và đúng người, bất kể máy khách gửi gì
+function applyDeleteReq(actor,old,nu){
+ const had=old?.deleteReq||null,want=nu.deleteReq;
+ if(!want){delete nu.deleteReq;if(had&&!(had.by===actor.id||can(actor,'order.delete_approve')))return 'Chỉ người gửi yêu cầu, Kế toán hoặc Chủ được gỡ yêu cầu xóa.';return null}
+ if(had){nu.deleteReq=had;return null}
+ if(!can(actor,'order.delete_request')&&!can(actor,'order.delete_approve'))return 'Tài khoản này chưa được phép gửi yêu cầu xóa.';
+ const reason=typeof want.reason==='string'?want.reason.replace(/[<>]/g,'').trim().slice(0,200):'';
+ nu.deleteReq={by:actor.id,byName:actor.name,at:new Date().toISOString(),reason};return null
+}
+async function bookingApi(req,env,path,actor){
+ // Đơn hàng nằm trong database riêng (binding BOOKINGS), tách hẳn khỏi nội dung website.
+ if(!env.BOOKINGS)return json({error:'Chưa kết nối kho đơn hàng.'},503);
+ const bm=/^\/api\/booking(?:\/(ST[0-9]{1,12}))?$/.exec(path);if(!bm)return json({error:'Không tìm thấy.'},404);const bid=bm[1];
+ const parse=t=>{try{return JSON.parse(t)}catch{return null}};
+ const seeAll=can(actor,'order.view_all');
+ const visible=o=>seeAll||o.createdBy===actor.id;
+ if(!bid&&req.method==='GET'){
+  const {results}=await env.BOOKINGS.prepare('SELECT data FROM bookings ORDER BY seq').all();
+  let list=results.map(r=>parse(r.data)).filter(Boolean).filter(visible);
+  if(!can(actor,'net.access'))list=list.map(stripNet);
+  return json({bookings:list})
+ }
+ if(bid&&req.method==='DELETE'){
+  if(!can(actor,'order.delete_approve'))return noPerm('Bạn chưa được xóa đơn trực tiếp. Hãy gửi yêu cầu xóa để Kế toán hoặc Chủ duyệt.');
+  const row=await env.BOOKINGS.prepare('SELECT data FROM bookings WHERE id=?').bind(bid).first();
+  await env.BOOKINGS.prepare('DELETE FROM bookings WHERE id=?').bind(bid).run();
+  if(row)await logAudit(env,actor,'order.delete',bid,'Xóa đơn. Bản lưu trước khi xóa: '+row.data.slice(0,3500));
+  return json({ok:true})
+ }
+ if((req.method==='POST'&&!bid)||(req.method==='PUT'&&bid)){
+  if(Number(req.headers.get('content-length')||0)>200000)return json({error:'Dữ liệu quá lớn.'},413);
+  let input,data;try{input=await req.json()}catch{return json({error:'Nội dung không hợp lệ.'},400)}
+  try{data=validateBooking(input?.booking,bid)}catch(e){return json({error:e.message},400)}
+  const stamp=new Date().toISOString(),exists=await env.BOOKINGS.prepare('SELECT data FROM bookings WHERE id=?').bind(data.id).first();
+  const old=exists?parse(exists.data):null;
+  if(req.method==='POST'){
+   if(exists)return json({error:'Mã đơn đã tồn tại.'},409);
+   if(!actor.owner){
+    if(!can(actor,'order.create'))return noPerm('Tài khoản này chưa được phép tạo đơn.');
+    data.createdBy=actor.id;data.createdByName=actor.name;data.owner=actor.id;
+    if(!can(actor,'net.access'))stripNet(data);
+    if(ost(data)!=='processing'&&!can(actor,'order.complete'))return noPerm('Đơn mới chỉ được tạo ở trạng thái Đang xử lý.');
+    if(data.payments.length){
+     if(!can(actor,'pay.record'))return noPerm('Tài khoản này chưa được phép ghi nhận thu tiền.');
+     for(const p of data.payments){if(p.amount<0&&!can(actor,'pay.refund'))return noPerm('Tài khoản này chưa được phép ghi nhận hoàn tiền.');if(p.status!=='pending'&&!can(actor,'pay.approve'))p.status='pending'}
+    }
+    if(data.commission&&(Number(data.commission.amount)>0||data.commission.ctvId)){if(!can(actor,'commission.edit'))return noPerm('Tài khoản này chưa được phép nhập hoa hồng.');if(data.commission.paid&&!can(actor,'commission.pay'))return noPerm('Chỉ Kế toán hoặc Chủ được đánh dấu đã trả hoa hồng.')}
+    if(data.supPaid&&!can(actor,'supplier.pay'))return noPerm('Chỉ Kế toán hoặc Chủ được đánh dấu đã trả đối tác.');
+    delete data.deleteReq
+   }else{if(!data.createdBy)data.createdBy=EMAIL;if(!data.owner)data.owner=EMAIL;const e=applyDeleteReq(actor,null,data);if(e)return noPerm(e)}
+   data.updatedBy=actor.owner?EMAIL:actor.email;data.updatedAt=stamp;
+   try{await env.BOOKINGS.prepare('INSERT INTO bookings(id,data,created,updated) VALUES(?,?,?,?)').bind(data.id,JSON.stringify(data),stamp,stamp).run()}catch{return json({error:'Mã đơn đã tồn tại.'},409)}
+   await logAudit(env,actor,'order.create',data.id,summarize(null,data));
+   return json({ok:true},201)
+  }
+  if(!old)return json({error:'Không tìm thấy đơn.'},404);
+  if(!actor.owner){
+   if(!visible(old))return json({error:'Không tìm thấy đơn.'},404);
+   if(!can(actor,'net.access'))restoreNet(old,data);
+   // Người tạo, người sở hữu không đổi được
+   data.createdBy=old.createdBy;data.owner=old.owner;if(old.createdByName!==undefined)data.createdByName=old.createdByName;else delete data.createdByName;
+   const e1=applyDeleteReq(actor,old,data);if(e1)return noPerm(e1);
+   const e2=checkBookingChange(actor,old,data);if(e2)return noPerm(e2)
+  }else{
+   const e1=applyDeleteReq(actor,old,data);if(e1)return noPerm(e1)
+  }
+  data.updatedBy=actor.owner?EMAIL:actor.email;data.updatedAt=stamp;
+  await env.BOOKINGS.prepare('UPDATE bookings SET data=?,updated=? WHERE id=?').bind(JSON.stringify(data),stamp,data.id).run();
+  const note=summarize(old,data);
+  if(!/^Lưu lại, không đổi/.test(note))await logAudit(env,actor,'order.update',data.id,note);
+  return json({ok:true})
+ }
+ return json({error:'Không hỗ trợ.'},405)
+}
+// ---- Quản lý tài khoản nhân viên (chỉ Chủ) và đổi mật khẩu ----
+async function staffApi(req,env,path,actor,u){
+ if(!env.BOOKINGS)return json({error:'Chưa kết nối kho đơn hàng.'},503);
+ await ensureAuthTables(env);
+ const m=/^\/api\/staff(?:\/(s[0-9a-f]{12}))?$/.exec(path);if(!m)return json({error:'Không tìm thấy.'},404);const id=m[1];
+ if(req.method==='GET'&&!id&&u.searchParams.get('lite')==='1'){
+  if(!(actor.owner||can(actor,'lead.assign')||can(actor,'order.view_all')))return noPerm();
+  const {results}=await env.BOOKINGS.prepare('SELECT id,name,role FROM staff WHERE active=1 ORDER BY name').all();
+  return json({staff:results.map(r=>({id:r.id,name:r.name,role:r.role}))})
+ }
+ if(!actor.owner)return noPerm('Chỉ Chủ được quản lý tài khoản nhân viên.');
+ if(req.method==='GET'&&!id){
+  const {results}=await env.BOOKINGS.prepare('SELECT * FROM staff ORDER BY created').all();
+  return json({staff:results.map(staffView),catalog:PERM_CATALOG.map(([group,key,label])=>({group,key,label})),roles:{accountant:ROLE_PERMS.accountant,sales:ROLE_PERMS.sales},roleLabels:ROLE_LABELS})
+ }
+ const cleanName=x=>typeof x==='string'&&x.trim().length>=1&&x.trim().length<=60&&!/[<>]/.test(x)?x.trim().replace(/\s+/g,' '):null;
+ const cleanEmail=x=>typeof x==='string'&&/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(x.trim())&&x.trim().length<=80?x.trim().toLowerCase():null;
+ const goodPass=x=>typeof x==='string'&&x.length>=8&&x.length<=128;
+ if(req.method==='POST'&&!id){
+  if(Number(req.headers.get('content-length')||0)>8000)return json({error:'Dữ liệu quá lớn.'},413);
+  let i;try{i=await req.json()}catch{return json({error:'Nội dung không hợp lệ.'},400)}
+  const name=cleanName(i?.name),email=cleanEmail(i?.email);
+  if(!name)return json({error:'Tên không hợp lệ.'},400);if(!email)return json({error:'Email không hợp lệ.'},400);
+  if(email===EMAIL)return json({error:'Email này là của Chủ.'},400);
+  if(!goodPass(i.password))return json({error:'Mật khẩu cần từ 8 đến 128 ký tự.'},400);
+  const role=['accountant','sales','custom'].includes(i.role)?i.role:'sales';
+  const perms=cleanPerms(i.perms)||(ROLE_PERMS[role]||[]).slice();
+  const cnt=await env.BOOKINGS.prepare('SELECT COUNT(*) AS n FROM staff').first();if((cnt?.n||0)>=50)return json({error:'Đã đạt giới hạn số tài khoản.'},400);
+  const dup=await env.BOOKINGS.prepare('SELECT id FROM staff WHERE email=?').bind(email).first();if(dup)return json({error:'Email này đã có tài khoản.'},409);
+  const nid='s'+hex(crypto.getRandomValues(new Uint8Array(6))),now=new Date().toISOString();
+  await env.BOOKINGS.prepare('INSERT INTO staff(id,name,email,role,perms,hash,active,created,updated) VALUES(?,?,?,?,?,?,1,?,?)').bind(nid,name,email,role,JSON.stringify(perms),await makePasswordHash(i.password),now,now).run();
+  await logAudit(env,actor,'staff.create',nid,name+' <'+email+'>, vai trò '+(ROLE_LABELS[role]||role)+', '+perms.length+' quyền');
+  return json({staff:staffView(await env.BOOKINGS.prepare('SELECT * FROM staff WHERE id=?').bind(nid).first())},201)
+ }
+ if(req.method==='PUT'&&id){
+  if(Number(req.headers.get('content-length')||0)>8000)return json({error:'Dữ liệu quá lớn.'},413);
+  let i;try{i=await req.json()}catch{return json({error:'Nội dung không hợp lệ.'},400)}
+  const row=await env.BOOKINGS.prepare('SELECT * FROM staff WHERE id=?').bind(id).first();if(!row)return json({error:'Không tìm thấy tài khoản.'},404);
+  const next={name:row.name,role:row.role,perms:row.perms,active:row.active},notes=[];let kill=false,hash=row.hash;
+  if(i.name!==undefined){const n=cleanName(i.name);if(!n)return json({error:'Tên không hợp lệ.'},400);if(n!==row.name){next.name=n;notes.push('đổi tên')}}
+  if(i.role!==undefined){if(!['accountant','sales','custom'].includes(i.role))return json({error:'Vai trò không hợp lệ.'},400);if(i.role!==row.role){next.role=i.role;notes.push('vai trò '+(ROLE_LABELS[i.role]||i.role))}}
+  if(i.perms!==undefined){const p=cleanPerms(i.perms);if(!p)return json({error:'Danh sách quyền không hợp lệ.'},400);if(JSON.stringify(p)!==JSON.stringify(cleanPerms(JSON.parse(row.perms))||[])){next.perms=JSON.stringify(p);notes.push('đổi quyền ('+p.length+' quyền)')}}
+  if(i.active!==undefined){const a=i.active?1:0;if(a!==row.active){next.active=a;notes.push(a?'bật lại':'tắt tài khoản');if(!a)kill=true}}
+  if(i.password!==undefined){if(!goodPass(i.password))return json({error:'Mật khẩu cần từ 8 đến 128 ký tự.'},400);hash=await makePasswordHash(i.password);notes.push('đặt lại mật khẩu');kill=true}
+  await env.BOOKINGS.prepare('UPDATE staff SET name=?,role=?,perms=?,hash=?,active=?,updated=? WHERE id=?').bind(next.name,next.role,next.perms,hash,next.active,new Date().toISOString(),id).run();
+  if(kill)await env.BOOKINGS.prepare('DELETE FROM staff_sessions WHERE staff_id=?').bind(id).run();
+  if(notes.length)await logAudit(env,actor,'staff.update',id,row.name+': '+notes.join(', '));
+  return json({staff:staffView(await env.BOOKINGS.prepare('SELECT * FROM staff WHERE id=?').bind(id).first())})
+ }
+ return json({error:'Không hỗ trợ.'},405)
+}
+async function auditApi(req,env,u,actor){
+ if(!actor.owner)return noPerm('Chỉ Chủ được xem nhật ký.');
+ if(!env.BOOKINGS)return json({error:'Chưa kết nối kho đơn hàng.'},503);
+ await ensureAuthTables(env);
+ const limit=Math.min(200,Math.max(1,Number(u.searchParams.get('limit'))||100)),before=Number(u.searchParams.get('before'))||0;
+ const q=(u.searchParams.get('q')||'').trim().slice(0,60);
+ const where=[],args=[];if(before){where.push('id<?');args.push(before)}if(q){where.push('(target LIKE ? OR actor_name LIKE ? OR action LIKE ? OR detail LIKE ?)');const l='%'+q.replace(/[%_]/g,'')+'%';args.push(l,l,l,l)}
+ const {results}=await env.BOOKINGS.prepare('SELECT id,at,actor,actor_name,action,target,detail FROM audit_log'+(where.length?' WHERE '+where.join(' AND '):'')+' ORDER BY id DESC LIMIT '+limit).bind(...args).all();
+ return json({log:results})
+}
+async function staffLogin(env,mail,pass,req){
+ const bad=()=>json({error:'Email hoặc mật khẩu chưa đúng.'},401);
+ if(!env.BOOKINGS||!mail)return bad();
+ let row=null;try{await ensureAuthTables(env);row=await env.BOOKINGS.prepare('SELECT * FROM staff WHERE email=?').bind(mail).first()}catch{return bad()}
+ const ok=await passwordOK(pass,row?row.hash:'0:'+'0'.repeat(64));
+ if(!row||!ok||!row.active)return bad();
+ const token=crypto.randomUUID()+'-'+crypto.randomUUID(),csrf=crypto.randomUUID();
+ await env.BOOKINGS.prepare('INSERT INTO staff_sessions(token,csrf,expires,staff_id) VALUES(?,?,?,?)').bind(await sha(token),csrf,Date.now()+8*3600000,row.id).run();
+ await env.BOOKINGS.prepare('DELETE FROM staff_sessions WHERE expires<?').bind(Date.now()).run();
+ await env.DB.prepare('DELETE FROM attempts WHERE expires<?').bind(Date.now()).run();
+ await logAudit(env,{id:row.id,name:row.name,role:row.role,owner:false},'login',row.id,'Đăng nhập');
+ return json({email:row.email,csrf,name:row.name,role:row.role},200,{'set-cookie':sessionCookie(token,28800,req)})
+}
 async function handle(req,env){const u=new URL(req.url),path=u.pathname;
 if(path.startsWith('/media/')){if(req.method!=='GET')return json({error:'Không hỗ trợ.'},405);const key=path.slice(7);if(!/^[a-zA-Z0-9._-]+$/.test(key))return new Response('Not found',{status:404});if(!env.MEDIA)return new Response('Not configured',{status:503});const o=await env.MEDIA.get(key);if(!o)return new Response('Not found',{status:404});return new Response(o.body,{headers:{'content-type':o.httpMetadata?.contentType||'application/octet-stream','cache-control':'public,max-age=31536000,immutable','x-content-type-options':'nosniff'}})}
 if(!path.startsWith('/api/')){const response=await env.ASSETS.fetch(req);const headers=new Headers(response.headers);headers.set('X-Content-Type-Options','nosniff');headers.set('Referrer-Policy','strict-origin-when-cross-origin');headers.set('Content-Security-Policy',path.startsWith('/admin/booking')?BOOKING_CSP:CSP);if(path.startsWith('/admin'))headers.set('Cache-Control','no-store');return new Response(response.body,{status:response.status,headers})}
@@ -322,14 +663,30 @@ if(path==='/api/login'&&req.method==='POST'){
  const bucket=Math.floor(Date.now()/900000),ip=req.headers.get('CF-Connecting-IP')||'local';const limits=['ip:'+await sha(ip)+':'+bucket,'global:'+bucket];
  for(const key of limits){await env.DB.prepare('INSERT INTO attempts(key,count,expires) VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET count=count+1').bind(key,Date.now()+900000).run();const row=await env.DB.prepare('SELECT count FROM attempts WHERE key=?').bind(key).first();if(row.count>(key.startsWith('global:')?50:10))return json({error:'Đã thử quá nhiều lần. Vui lòng đợi 15 phút.'},429)}
  let input;try{input=await req.json()}catch{return json({error:'Nội dung không hợp lệ.'},400)}const pass=typeof input.password==='string'?input.password:'';if(pass.length>256)return json({error:'Đăng nhập không thành công.'},401);
- const ok=await passwordOK(pass,env.ADMIN_PASSWORD_HASH);if(input.email?.toLowerCase().trim()!==EMAIL||!ok)return json({error:'Email hoặc mật khẩu chưa đúng.'},401);
- const token=crypto.randomUUID()+'-'+crypto.randomUUID(),csrf=crypto.randomUUID();await env.DB.prepare('INSERT INTO sessions(token,csrf,expires) VALUES(?,?,?)').bind(await sha(token),csrf,Date.now()+8*3600000).run();await env.DB.prepare('DELETE FROM sessions WHERE expires<?').bind(Date.now()).run();await env.DB.prepare('DELETE FROM attempts WHERE expires<?').bind(Date.now()).run();return json({email:EMAIL,csrf},200,{'set-cookie':sessionCookie(token,28800,req)})
+ const mail=typeof input.email==='string'?input.email.toLowerCase().trim():'';
+ if(mail!==EMAIL)return staffLogin(env,mail,pass,req);
+ const ok=await passwordOK(pass,env.ADMIN_PASSWORD_HASH);if(!ok)return json({error:'Email hoặc mật khẩu chưa đúng.'},401);
+ const token=crypto.randomUUID()+'-'+crypto.randomUUID(),csrf=crypto.randomUUID();await env.DB.prepare('INSERT INTO sessions(token,csrf,expires) VALUES(?,?,?)').bind(await sha(token),csrf,Date.now()+8*3600000).run();await env.DB.prepare('DELETE FROM sessions WHERE expires<?').bind(Date.now()).run();await env.DB.prepare('DELETE FROM attempts WHERE expires<?').bind(Date.now()).run();return json({email:EMAIL,csrf,name:'Chủ',role:'owner'},200,{'set-cookie':sessionCookie(token,28800,req)})
 }
-const token=cookie(req),session=token?await env.DB.prepare('SELECT csrf,expires FROM sessions WHERE token=?').bind(await sha(token)).first():null;
-if(!session||session.expires<Date.now())return json({error:'Vui lòng đăng nhập.'},401);
-if(req.method!=='GET'&&req.headers.get('x-csrf-token')!==session.csrf)return json({error:'Phiên xác thực không hợp lệ. Hãy đăng nhập lại.'},403);
-if(path==='/api/session'&&req.method==='GET')return json({email:EMAIL,csrf:session.csrf});
-if(path==='/api/logout'&&req.method==='POST'){await env.DB.prepare('DELETE FROM sessions WHERE token=?').bind(await sha(token)).run();return json({ok:true},200,{'set-cookie':sessionCookie('',0,req)})}
+const actor=await resolveActor(req,env);
+if(!actor)return json({error:'Vui lòng đăng nhập.'},401);
+if(req.method!=='GET'&&req.headers.get('x-csrf-token')!==actor.csrf)return json({error:'Phiên xác thực không hợp lệ. Hãy đăng nhập lại.'},403);
+if(path==='/api/session'&&req.method==='GET')return json({email:actor.email,csrf:actor.csrf,id:actor.id,name:actor.name,role:actor.role,roleLabel:ROLE_LABELS[actor.role]||actor.role,perms:actor.perms});
+if(path==='/api/logout'&&req.method==='POST'){await env.DB.prepare('DELETE FROM sessions WHERE token=?').bind(actor.token).run();if(!actor.owner)await env.BOOKINGS.prepare('DELETE FROM staff_sessions WHERE token=?').bind(actor.token).run();return json({ok:true},200,{'set-cookie':sessionCookie('',0,req)})}
+if(path==='/api/me/password'&&req.method==='POST'){
+ if(actor.owner)return json({error:'Mật khẩu của Chủ đổi trong Cloudflare (ADMIN_PASSWORD_HASH), không đổi ở đây.'},400);
+ let i;try{i=await req.json()}catch{return json({error:'Nội dung không hợp lệ.'},400)}
+ if(typeof i?.next!=='string'||i.next.length<8||i.next.length>128)return json({error:'Mật khẩu mới cần từ 8 đến 128 ký tự.'},400);
+ const row=await env.BOOKINGS.prepare('SELECT hash FROM staff WHERE id=?').bind(actor.id).first();
+ if(!row||typeof i.current!=='string'||i.current.length>128||!await passwordOK(i.current,row.hash))return json({error:'Mật khẩu hiện tại chưa đúng.'},400);
+ await env.BOOKINGS.prepare('UPDATE staff SET hash=?,updated=? WHERE id=?').bind(await makePasswordHash(i.next),new Date().toISOString(),actor.id).run();
+ await env.BOOKINGS.prepare('DELETE FROM staff_sessions WHERE staff_id=? AND token<>?').bind(actor.id,actor.token).run();
+ await logAudit(env,actor,'staff.password',actor.id,'Tự đổi mật khẩu');
+ return json({ok:true})
+}
+if(!actor.owner&&!/^\/api\/(booking|booking-qr|booking-settings|booking-units|hotel-rates|customers|leads|staff|audit)(\/|$)/.test(path))return noPerm('Tài khoản nhân viên không vào được phần này.');
+if(path==='/api/staff'||path.startsWith('/api/staff/'))return staffApi(req,env,path,actor,u);
+if(path==='/api/audit'&&req.method==='GET')return auditApi(req,env,u,actor);
 if(path==='/api/content'&&req.method==='GET'){const {results}=await env.DB.prepare('SELECT * FROM content ORDER BY updated DESC').all();return json({items:results.map(x=>({id:x.id,draft:JSON.parse(x.draft),published:x.published?JSON.parse(x.published):null,updated:x.updated}))})}
 if(path==='/api/upload'&&req.method==='POST')return uploadImage(req,env);
 if(path==='/api/booking-qr'&&req.method==='GET'){
@@ -341,6 +698,7 @@ if(path==='/api/booking-qr'&&req.method==='GET'){
  return new Response(r.body,{headers:{'content-type':r.headers.get('content-type'),'cache-control':'private, max-age=300','x-content-type-options':'nosniff'}})
 }
 if(path==='/api/booking-units'){
+ if(req.method!=='GET'&&!can(actor,'settings.edit'))return noPerm();
  if(!env.BOOKINGS)return json({error:'Chưa kết nối kho đơn hàng.'},503);
  try{
   if(req.method==='GET'){const {results}=await env.BOOKINGS.prepare('SELECT name FROM booking_units ORDER BY rowid').all();return json({units:results.map(r=>r.name)})}
@@ -359,6 +717,7 @@ if(path==='/api/booking-units'){
  return json({error:'Không hỗ trợ.'},405)
 }
 if(path==='/api/hotel-rates'){
+ if(!can(actor,req.method==='GET'?'rates.view':'rates.edit'))return noPerm();
  // Bảng giá net theo khách sạn: mỗi khách sạn một dòng trong booking_settings (khóa rates:tên), không cần tạo bảng mới.
  if(!env.BOOKINGS)return json({error:'Chưa kết nối kho đơn hàng.'},503);
  const hk=n=>String(n||'').trim().toLowerCase().replace(/\s+/g,' '),url=new URL(req.url);
@@ -406,6 +765,7 @@ if(path==='/api/hotel-rates'){
  return json({error:'Không hỗ trợ.'},405)
 }
 if(path==='/api/booking-settings'){
+ if(req.method!=='GET'&&!can(actor,'settings.edit'))return noPerm();
  if(!env.BOOKINGS)return json({error:'Chưa kết nối kho đơn hàng.'},503);
  try{
   if(req.method==='GET'){const {results}=await env.BOOKINGS.prepare('SELECT key,value FROM booking_settings').all();const out={};for(const r of results)out[r.key]=r.value;const parse=k=>{try{return out[k]?JSON.parse(out[k]):null}catch{return null}};return json({settings:{slipNote:out.slipNote||'',categories:parse('categories'),unitHide:parse('unitHide')||{},partners:parse('partners')||[],ccInternal:parse('ccInternal')||[],hotels:parse('hotels')||[]}})}
@@ -445,25 +805,8 @@ if(path==='/api/booking-settings'){
  return json({error:'Không hỗ trợ.'},405)
 }
 if(path==='/api/posts'||path.startsWith('/api/posts/'))return postsApi(req,env,path);
-const crm=await crmApi(req,env,path);if(crm)return crm;
-if(path==='/api/booking'||path.startsWith('/api/booking/')){
- // Đơn hàng nằm trong database riêng (binding BOOKINGS), tách hẳn khỏi nội dung website.
- if(!env.BOOKINGS)return json({error:'Chưa kết nối kho đơn hàng.'},503);
- const bm=/^\/api\/booking(?:\/(ST[0-9]{1,12}))?$/.exec(path);if(!bm)return json({error:'Không tìm thấy.'},404);const bid=bm[1];
- if(!bid&&req.method==='GET'){const {results}=await env.BOOKINGS.prepare('SELECT data FROM bookings ORDER BY seq').all();return json({bookings:results.map(r=>JSON.parse(r.data))})}
- if(bid&&req.method==='DELETE'){await env.BOOKINGS.prepare('DELETE FROM bookings WHERE id=?').bind(bid).run();return json({ok:true})}
- if((req.method==='POST'&&!bid)||(req.method==='PUT'&&bid)){
-  if(Number(req.headers.get('content-length')||0)>200000)return json({error:'Dữ liệu quá lớn.'},413);
-  let input,data;try{input=await req.json()}catch{return json({error:'Nội dung không hợp lệ.'},400)}
-  try{data=validateBooking(input?.booking,bid)}catch(e){return json({error:e.message},400)}
-  const stamp=new Date().toISOString();if(req.method==='POST'){if(!data.createdBy)data.createdBy=EMAIL;if(!data.owner)data.owner=EMAIL}data.updatedBy=EMAIL;data.updatedAt=stamp;
-  const now=stamp,text=JSON.stringify(data),exists=await env.BOOKINGS.prepare('SELECT id FROM bookings WHERE id=?').bind(data.id).first();
-  if(req.method==='POST'){if(exists)return json({error:'Mã đơn đã tồn tại.'},409);try{await env.BOOKINGS.prepare('INSERT INTO bookings(id,data,created,updated) VALUES(?,?,?,?)').bind(data.id,text,now,now).run()}catch{return json({error:'Mã đơn đã tồn tại.'},409)}return json({ok:true},201)}
-  if(!exists)return json({error:'Không tìm thấy đơn.'},404);
-  await env.BOOKINGS.prepare('UPDATE bookings SET data=?,updated=? WHERE id=?').bind(text,now,data.id).run();return json({ok:true})
- }
- return json({error:'Không hỗ trợ.'},405)
-}
+const crm=await crmApi(req,env,path,actor);if(crm)return crm;
+if(path==='/api/booking'||path.startsWith('/api/booking/'))return bookingApi(req,env,path,actor);
 const match=/^\/api\/content\/([a-z0-9-]{1,90})$/.exec(path);if(match&&req.method==='PUT'){if(Number(req.headers.get('content-length')||0)>200000)return json({error:'Nội dung quá lớn.'},413);let input,p;try{input=await req.json();p=validate(input.data,match[1])}catch(e){return json({error:e.message||'Nội dung không hợp lệ.'},400)}const id=match[1];if(id!=='settings'&&!id.startsWith('service-')&&!id.startsWith('post-'))return json({error:'Mục không hợp lệ.'},400);const mode=input.mode;if(!['draft','publish','unpublish'].includes(mode))return json({error:'Thao tác không hợp lệ.'},400);const old=await env.DB.prepare('SELECT draft,published FROM content WHERE id=?').bind(id).first();const published=mode==='publish'?JSON.stringify(p):mode==='unpublish'?null:old?.published||null;let wasHidden=false;try{wasHidden=!!JSON.parse(old?.draft||'{}').hidden}catch{}const hidden=id!=='settings'&&(mode==='unpublish'||(mode==='draft'&&!old?.published&&wasHidden));await env.DB.prepare('INSERT INTO content(id,draft,published,updated) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET draft=excluded.draft,published=excluded.published,updated=excluded.updated').bind(id,JSON.stringify(hidden?{...p,hidden:true}:p),published,new Date().toISOString()).run();return json({ok:true})}
 return json({error:'Không tìm thấy.'},404)
 }

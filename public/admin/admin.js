@@ -89,7 +89,7 @@ function showHub(){$('workspace').hidden=true;$('hub').hidden=false}
 function showWeb(){$('hub').hidden=true;$('workspace').hidden=false;open(current,true)}
 $('hub-web').onclick=()=>{location.hash='#web';showWeb()};
 $('hub-link').onclick=e=>{e.preventDefault();if(!$('workspace').hidden&&dirty&&!confirm('Có thay đổi chưa lưu. Bỏ thay đổi để quay lại màn hình chọn khu?'))return;dirty=false;history.replaceState(null,'','/admin/');showHub()};
-$('login').onsubmit=async e=>{e.preventDefault();$('login-status').textContent='Đang đăng nhập…';try{const r=await api('login','POST',{email:$('email').value,password:$('password').value});csrf=r.csrf;$('password').value='';await enter();$('login-status').textContent=''}catch(e){$('login-status').textContent=e.message}};
+$('login').onsubmit=async e=>{e.preventDefault();$('login-status').textContent='Đang đăng nhập…';try{const r=await api('login','POST',{email:$('email').value,password:$('password').value});csrf=r.csrf;$('password').value='';if(r.role&&r.role!=='owner'){location.href='/admin/booking/';return}await enter();$('login-status').textContent=''}catch(e){$('login-status').textContent=e.message}};
 $('logout').onclick=async()=>{if(dirty&&!confirm('Có thay đổi chưa lưu. Vẫn đăng xuất?'))return;try{await api('logout','POST');location.reload()}catch(e){error(e)}};
 async function save(mode){if(mode==='publish'&&!confirm('Đăng nội dung này lên website để khách xem?'))return;if(mode==='unpublish'&&!confirm('Gỡ bài khỏi website? Bản nháp vẫn được giữ.'))return;const buttons=[...document.querySelectorAll('.savebar button')];buttons.forEach(x=>x.disabled=true);try{await api('content/'+current,'PUT',{data:data(),mode});dirty=false;await refresh();$('unpublish').hidden=current==='settings'||!items.find(x=>x.id===current)?.published;setBadge(items.find(x=>x.id===current));status(mode==='publish'?'Đã đăng. Mở website để kiểm tra.':mode==='unpublish'?'Đã gỡ khỏi website.':'Đã lưu bản nháp trên hệ thống.')}catch(e){error(e)}finally{buttons.forEach(x=>x.disabled=false)}}
 $('save').onclick=()=>save('draft');$('publish').onclick=()=>save('publish');$('unpublish').onclick=()=>save('unpublish');
@@ -107,7 +107,7 @@ $('insert-link').onmousedown=e=>e.preventDefault();$('insert-link').onclick=()=>
 $('preview').onclick=()=>{const p=data(),article=$('preview-content');article.replaceChildren();const h=document.createElement('h1');h.textContent=p.title;const desc=document.createElement('p');desc.textContent=p.summary;const body=document.createElement('div');body.innerHTML=p.body;article.append(h,desc,body);$('preview-dialog').showModal()};$('close-preview').onclick=()=>$('preview-dialog').close();
 $('backup').onclick=()=>{const blob=new Blob([JSON.stringify({id:current,data:data()},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=current+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
 window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue=''}});
-try{const r=await api('session');csrf=r.csrf;await enter()}catch(e){$('login-status').textContent=e.message==='Vui lòng đăng nhập.'?'':e.message}
+try{const r=await api('session');csrf=r.csrf;if(r.role&&r.role!=='owner'){location.href='/admin/booking/'}else await enter()}catch(e){$('login-status').textContent=e.message==='Vui lòng đăng nhập.'?'':e.message}
 
 
 
