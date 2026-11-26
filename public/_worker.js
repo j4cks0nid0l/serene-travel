@@ -365,7 +365,7 @@ const PERM_KEYS=PERM_CATALOG.map(x=>x[1]);
 const OWNER_ONLY_PERMS=['staff.manage','audit.view'];
 const ROLE_PERMS={
  accountant:['order.view_all','order.create','order.edit','order.edit_done','order.complete','order.cancel','order.delete_approve','net.access','pay.record','pay.approve','pay.refund','commission.edit','commission.pay','supplier.pay','customer.view_all','customer.create','customer.edit','lead.view_all','lead.assign','lead.edit','debt.view','stats.view','data.export','rates.view','rates.edit','settings.edit','import.run'],
- sales:['order.create','order.edit','order.cancel','order.delete_request','net.access','pay.record','commission.edit','customer.create','customer.edit','lead.edit','rates.view']
+ sales:['order.create','order.edit','order.cancel','order.delete_request','net.access','pay.record','commission.edit','customer.create','customer.edit','lead.edit','stats.view','rates.view']
 };
 const ROLE_LABELS={owner:'Chủ',accountant:'Kế toán',sales:'Sales',custom:'Tùy chỉnh'};
 const OWNER_ACTOR_ID='owner';
