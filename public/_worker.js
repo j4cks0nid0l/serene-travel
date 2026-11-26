@@ -358,6 +358,53 @@ if(path==='/api/booking-units'){
  }catch{return json({error:'Chưa có bảng đơn vị. Cần chạy thêm lệnh tạo bảng trong D1.'},503)}
  return json({error:'Không hỗ trợ.'},405)
 }
+if(path==='/api/hotel-rates'){
+ // Bảng giá net theo khách sạn: mỗi khách sạn một dòng trong booking_settings (khóa rates:tên), không cần tạo bảng mới.
+ if(!env.BOOKINGS)return json({error:'Chưa kết nối kho đơn hàng.'},503);
+ const hk=n=>String(n||'').trim().toLowerCase().replace(/\s+/g,' '),url=new URL(req.url);
+ try{
+  if(req.method==='GET'){
+   const want=url.searchParams.get('hotel');
+   if(want){const row=await env.BOOKINGS.prepare('SELECT value FROM booking_settings WHERE key=?').bind('rates:'+hk(want)).first();let v=null;try{v=row?JSON.parse(row.value):null}catch{}return json({rates:v})}
+   const {results}=await env.BOOKINGS.prepare("SELECT key,value FROM booking_settings WHERE key LIKE 'rates:%'").all();
+   const list=[];for(const r of results){try{const v=JSON.parse(r.value);list.push({name:v.name,updated:v.updated||'',rows:Array.isArray(v.rows)?v.rows.length:0,last:Array.isArray(v.rows)?v.rows.reduce((m,x)=>x.to>m?x.to:m,''):'',note:!!v.note})}catch{}}
+   return json({list})
+  }
+  if(req.method==='PUT'){
+   if(Number(req.headers.get('content-length')||0)>900000)return json({error:'Dữ liệu quá lớn, hãy nhập ít khách sạn hơn mỗi lần.'},413);
+   let input;try{input=await req.json()}catch{return json({error:'Nội dung không hợp lệ.'},400)}
+   const items=input&&Array.isArray(input.items)?input.items:null;
+   if(!items||!items.length||items.length>20)return json({error:'Mỗi lần lưu 1 đến 20 khách sạn.'},400);
+   const t=(x,max)=>{if(x==null)return '';if(typeof x!=='string')return null;const y=x.trim();return y.length>max||/[<>]/.test(y)?null:y};
+   const isD=s=>{const m=/^(\d{4})-(\d\d)-(\d\d)$/.exec(s||'');if(!m)return false;const d=new Date(Date.UTC(+m[1],+m[2]-1,+m[3]));return d.getUTCFullYear()===+m[1]&&d.getUTCMonth()===+m[2]-1&&d.getUTCDate()===+m[3]};
+   const writes=[];
+   for(const it of items){
+    if(!it||typeof it!=='object')return json({error:'Khách sạn không hợp lệ.'},400);
+    const name=t(it.name,120);if(!name)return json({error:'Tên khách sạn không hợp lệ.'},400);
+    const note=t(it.note,2000);if(note===null)return json({error:name+': ghi chú quá dài hoặc có ký tự < >.'},400);
+    const updated=t(it.updated,20);if(updated===null)return json({error:name+': ngày cập nhật không hợp lệ.'},400);
+    if(!Array.isArray(it.rows)||it.rows.length>600)return json({error:name+': tối đa 600 dòng giá.'},400);
+    const rows=[];
+    for(const r of it.rows){
+     if(!r||typeof r!=='object')return json({error:name+': dòng giá không hợp lệ.'},400);
+     const room=t(r.room,120),label=t(r.label,60),p=r.p==null?'':r.p;
+     if(!room||label===null||typeof p!=='string'||(p&&!/^[A-Za-z0-9_-]{1,40}$/.test(p))||!isD(r.from)||!isD(r.to)||r.from>r.to)return json({error:name+': có dòng giá sai hạng phòng, đối tác hoặc ngày.'},400);
+     const net=r.net,sat=r.sat==null?null:r.sat;
+     if(!Number.isInteger(net)||net<1||net>100000000||(sat!==null&&(!Number.isInteger(sat)||sat<1||sat>100000000)))return json({error:name+': có dòng giá sai số tiền.'},400);
+     rows.push({p,room,label,from:r.from,to:r.to,net,sat})
+    }
+    writes.push([ 'rates:'+hk(name),JSON.stringify({name,note,updated,rows}) ])
+   }
+   for(const [k,v] of writes)await env.BOOKINGS.prepare('INSERT INTO booking_settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(k,v).run();
+   return json({ok:true,saved:writes.length})
+  }
+  if(req.method==='DELETE'){
+   const want=url.searchParams.get('hotel');if(!want)return json({error:'Thiếu tên khách sạn.'},400);
+   await env.BOOKINGS.prepare('DELETE FROM booking_settings WHERE key=?').bind('rates:'+hk(want)).run();return json({ok:true})
+  }
+ }catch{return json({error:'Chưa lưu được bảng giá. Thử lại sau.'},503)}
+ return json({error:'Không hỗ trợ.'},405)
+}
 if(path==='/api/booking-settings'){
  if(!env.BOOKINGS)return json({error:'Chưa kết nối kho đơn hàng.'},503);
  try{
