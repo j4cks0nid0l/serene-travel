@@ -1595,7 +1595,7 @@ function renderList(){
   $("panel-list").classList.toggle("show-detail",!!selId&&!!$("detail-wrap").innerHTML);
 }
 
-function openDetail(id){ closeRowMenu(); selId=id; showDetail(id); renderList(); }
+function openDetail(id){ closeRowMenu(); const again=selId===id; selId=id; showDetail(id); renderList(); if(!again) window.scrollTo({top:0}); }
 function closeDetail(){ selId=null; $("detail-wrap").innerHTML=""; renderList(); window.scrollTo({top:0}); }
 // Menu 3 chấm của từng đơn
 function rowMenu(ev,id){
@@ -1727,7 +1727,6 @@ function showDetail(id){
 
   ${sendPanelHtml(b)}`;
   $("panel-list").classList.toggle("show-detail",!!selId);
-  window.scrollTo({top:0});
 }
 
 // Tính số tiền và nhãn cho từng nút ghi nhận tiền
