@@ -80,6 +80,7 @@ const BOOKING_ORDER_STATUSES=['processing','success','cancelled'],CUSTOMER_ID_RE
 function validateCrmFields(b){
  if(b.orderStatus!==undefined&&!BOOKING_ORDER_STATUSES.includes(b.orderStatus))throw Error('Trạng thái đơn không hợp lệ.');
  if(b.customerId!==undefined&&b.customerId!==''&&!(typeof b.customerId==='string'&&CUSTOMER_ID_RE.test(b.customerId)))throw Error('Mã khách hàng không hợp lệ.');
+ if(b.ref!==undefined&&!(typeof b.ref==='string'&&b.ref.length<=40&&!/[<>]/.test(b.ref)))throw Error('Mã tham chiếu không hợp lệ.');
  for(const k of ['createdBy','updatedBy','owner'])if(b[k]!==undefined&&!(typeof b[k]==='string'&&b[k].length<=80&&!/[<>]/.test(b[k])))throw Error('Thông tin người tạo không hợp lệ.');
  for(const p of b.payments){
   if(p.status!==undefined&&!['approved','pending'].includes(p.status))throw Error('Trạng thái phiếu thu không hợp lệ.');
@@ -115,6 +116,36 @@ function cleanLead(i){
  if(!LEAD_STATUSES.includes(status)||!(bid===''||(typeof bid==='string'&&/^ST[0-9]{1,12}$/.test(bid))))return null;
  return {name,phone,need,source,status,booking_id:bid}}
 const newCrmId=prefix=>prefix+crypto.randomUUID().replace(/-/g,'').slice(0,12);
+// Form trên website gửi khách vào tab Lead. Cửa công khai nên giới hạn chặt: cùng nguồn, ô bẫy bot, giới hạn theo IP và tổng, kiểm tra từng trường, không trùng số trong 24 giờ.
+const VN_PHONE_RE=/^(?:0|\+84|84)[35789]\d{8}$/;
+async function publicLead(req,env){
+ if(!env.BOOKINGS||!env.DB)return json({error:'Chưa sẵn sàng.'},503);
+ if(Number(req.headers.get('content-length')||0)>6000)return json({error:'Yêu cầu quá lớn.'},413);
+ const hour=Math.floor(Date.now()/3600000),ip=req.headers.get('CF-Connecting-IP')||'local';
+ for(const key of ['lead:ip:'+await sha(ip)+':'+hour,'lead:global:'+hour]){
+  await env.DB.prepare('INSERT INTO attempts(key,count,expires) VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET count=count+1').bind(key,(hour+2)*3600000).run();
+  const row=await env.DB.prepare('SELECT count FROM attempts WHERE key=?').bind(key).first();
+  if(row.count>(key.startsWith('lead:global:')?200:10))return json({error:'Bạn gửi quá nhiều lần. Vui lòng thử lại sau hoặc nhắn Zalo cho Serene.'},429)
+ }
+ let i;try{i=await req.json()}catch{return json({error:'Nội dung không hợp lệ.'},400)}
+ if(!i||typeof i!=='object'||Array.isArray(i))return json({error:'Nội dung không hợp lệ.'},400);
+ if(i.website)return json({ok:true});
+ const name=cleanLine(i.name,80,true),phone=typeof i.phone==='string'?i.phone.replace(/[\s().-]/g,''):'';
+ if(!name||!VN_PHONE_RE.test(phone))return json({error:'Thông tin chưa hợp lệ.'},400);
+ const parts=[];
+ const add=(label,v,max,re)=>{if(v===undefined||v===null||v==='')return true;if(typeof v!=='string'&&typeof v!=='number')return false;const x=cleanLine(String(v),max);if(x===null||(x&&re&&!re.test(x)))return false;if(x)parts.push(label+': '+x);return true};
+ if(!(add('Dịch vụ',i.service,60)&&add('Điểm đến',i.destination,120)&&add('Ngày đi dự kiến',i.date,10,/^\d{4}-\d{2}-\d{2}$/)&&add('Người lớn',i.adults,4,/^\d{1,3}$/)&&add('Trẻ em',i.children,4,/^\d{1,3}$/)&&add('Ghi chú',i.message,1000)))return json({error:'Thông tin chưa hợp lệ.'},400);
+ const need=parts.join(' | ').slice(0,500),source=i.from==='news'?'Website: đăng ký ưu đãi':'Website: form liên hệ';
+ try{
+  const since=new Date(Date.now()-86400000).toISOString();
+  const dup=await env.BOOKINGS.prepare('SELECT id FROM leads WHERE phone=? AND created>? LIMIT 1').bind(phone,since).first();
+  if(dup)return json({ok:true});
+  const cnt=await env.BOOKINGS.prepare('SELECT COUNT(*) AS n FROM leads').first();if((cnt?.n||0)>=20000)return json({error:'Tạm thời chưa nhận được. Vui lòng nhắn Zalo cho Serene.'},503);
+  const now=new Date().toISOString();
+  await env.BOOKINGS.prepare('INSERT INTO leads(id,name,phone,need,source,status,booking_id,created,updated) VALUES(?,?,?,?,?,?,?,?,?)').bind(newCrmId('l'),name,phone,need,source,'new','',now,now).run();
+  return json({ok:true},201)
+ }catch(e){return json({error:'Chưa ghi nhận được. Vui lòng nhắn Zalo cho Serene.'},503)}
+}
 async function crmApi(req,env,path){
  // Trả về null nếu không phải đường dẫn khách hàng/lead
  const m=/^\/api\/(customers|leads)(?:\/([a-z0-9]{4,26}))?$/.exec(path);if(!m)return null;
@@ -284,6 +315,7 @@ if(!env.DB)return json({error:'Chưa kết nối kho nội dung Cloudflare.'},50
 if(path==='/api/public'&&req.method==='GET'){const {results}=await env.DB.prepare('SELECT id,published,updated FROM content WHERE published IS NOT NULL').all();return json({items:results.map(x=>({id:x.id,...JSON.parse(x.published),updated:x.updated}))})}
 if(path.startsWith('/api/machine/'))return machineApi(req,env,path,u);
 if(req.method!=='GET'&&req.headers.get('origin')!==u.origin)return json({error:'Yêu cầu không hợp lệ.'},403);
+if(path==='/api/lead-public'&&req.method==='POST')return publicLead(req,env);
 if(path==='/api/login'&&req.method==='POST'){
  if(!env.ADMIN_PASSWORD_HASH)return json({error:'Chưa thiết lập tài khoản quản trị.'},503);
  if(Number(req.headers.get('content-length')||0)>4096)return json({error:'Yêu cầu quá lớn.'},413);

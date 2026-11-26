@@ -83,3 +83,40 @@ test('Đơn hàng: trường mới được kiểm tra, đơn cũ không có tr�
   for(const bad of bads)assert.equal((await call('booking','POST',{booking:order('ST26112519',bad)})).status,400,JSON.stringify(bad));
  }finally{env.close()}
 });
+
+test('Lead từ website: không cần đăng nhập, kiểm tra dữ liệu, bẫy bot, không trùng số',async()=>{
+ const {env,call,login}=await session();
+ let n=0;const lead=(body)=>call('lead-public','POST',body,{headers:{'CF-Connecting-IP':'10.0.0.'+(++n)}});
+ try{
+  const good={from:'contact',name:'  Chị   Hoa ',phone:'0901 234 567',service:'Tour đảo',destination:'Nha Trang',date:'2026-12-20',adults:'2',children:'1',message:'Đi 3 ngày'};
+  assert.equal((await lead(good)).status,201);
+  await login();
+  let leads=(await (await call('leads')).json()).leads;
+  assert.equal(leads.length,1);assert.equal(leads[0].name,'Chị Hoa');assert.equal(leads[0].phone,'0901234567');assert.equal(leads[0].status,'new');
+  assert.equal(leads[0].source,'Website: form liên hệ');assert.match(leads[0].need,/Tour đảo/);assert.match(leads[0].need,/Người lớn: 2/);
+  // Cùng số trong 24 giờ: báo thành công nhưng không tạo thêm
+  assert.equal((await lead(good)).status,200);
+  assert.equal((await (await call('leads')).json()).leads.length,1);
+  // Ô bẫy bot có chữ: giả vờ thành công, không lưu
+  assert.equal((await lead({...good,phone:'0912345678',website:'http://spam'})).status,200);
+  assert.equal((await (await call('leads')).json()).leads.length,1);
+  // Dữ liệu sai bị từ chối
+  for(const bad of [{...good,phone:'12345'},{...good,phone:'0201234567'},{...good,name:''},{...good,name:'a<b'},{...good,phone:'0987654321',date:'20/12/2026'},{...good,phone:'0987654321',adults:'abc'},{...good,phone:'0987654321',message:'x'.repeat(1001)},{...good,phone:'0987654321',service:{x:1}},[],'x'])
+   assert.equal((await lead(bad)).status,400);
+  // Số +84 và đăng ký ưu đãi
+  assert.equal((await lead({from:'news',name:'Khách đăng ký ưu đãi',phone:'+84 987 654 321'})).status,201);
+  leads=(await (await call('leads')).json()).leads;assert.equal(leads.length,2);assert.equal(leads[1].source,'Website: đăng ký ưu đãi');
+  // Gửi từ trang khác bị chặn
+  assert.equal((await call('lead-public','POST',good,{headers:{origin:'https://evil.example','CF-Connecting-IP':'10.9.9.9'}})).status,403);
+ }finally{await env.close?.()}
+});
+
+test('Lead từ website: một IP gửi quá 10 lần mỗi giờ bị chặn, IP khác vẫn gửi được',async()=>{
+ const {env,call}=await session();
+ const from=(ip,phone)=>call('lead-public','POST',{name:'An',phone},{headers:{'CF-Connecting-IP':ip}});
+ try{
+  for(let k=0;k<10;k++)assert.equal((await from('9.9.9.9','09012345'+String(10+k))).status,201);
+  assert.equal((await from('9.9.9.9','0901234599')).status,429);
+  assert.equal((await from('8.8.8.8','0901234588')).status,201);
+ }finally{await env.close?.()}
+});
