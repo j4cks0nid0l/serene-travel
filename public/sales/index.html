@@ -84,8 +84,39 @@
   <section id="v-home" hidden>
     <div class="card">
       <h1>Xin chào, <span id="h-name"></span></h1>
-      <p class="lead">Bảng giá dành cho cộng tác viên đang được chuẩn bị và sẽ có ở đây trong bản cập nhật tới.</p>
+      <p class="lead">Chọn khách sạn để xem giá CTV, tính giá bán cho khách và copy báo giá.</p>
+      <input id="hs-search" type="search" placeholder="Tìm khách sạn" autocomplete="off" style="margin-top:10px">
     </div>
+    <div id="hs-list"></div>
+  </section>
+
+  <section id="v-hotel" hidden>
+    <button class="back" type="button" id="ht-back">&larr; Danh sách khách sạn</button>
+    <div class="card">
+      <h1 id="ht-name"></h1>
+      <p class="lead" id="ht-addr"></p>
+      <p class="note" id="ht-note"></p>
+    </div>
+    <div class="card">
+      <h2>Tính giá</h2>
+      <div class="grid2">
+        <div><label for="ht-in">Nhận phòng</label><input id="ht-in" type="date"></div>
+        <div><label for="ht-out">Trả phòng</label><input id="ht-out" type="date"></div>
+        <div><label for="ht-rooms">Số phòng</label><input id="ht-rooms" type="number" min="1" max="50" value="1" inputmode="numeric"></div>
+        <div><label for="ht-mk">Bạn lãi mỗi phòng/đêm (đ)</label><input id="ht-mk" inputmode="numeric" placeholder="VD: 100.000"></div>
+      </div>
+      <div id="ht-res"></div>
+    </div>
+    <div class="card">
+      <h2>Bảng giá CTV (1 phòng/đêm)</h2>
+      <div id="ht-table" class="tbl-wrap"></div>
+    </div>
+    <div class="card" id="ht-photo-card" hidden>
+      <h2>Hình ảnh</h2>
+      <p class="lead">Bấm Copy rồi dán thẳng vào Zalo hoặc Messenger.</p>
+      <div id="ht-photos" class="photos"></div>
+    </div>
+    <div class="toast" id="toast" hidden></div>
   </section>
 </main>
 <script src="/sales/sales.js"></script>

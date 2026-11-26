@@ -951,6 +951,8 @@ async function salesApi(req,env,path,u){
   await env.BOOKINGS.prepare('DELETE FROM ctv_sessions WHERE ctv_id=? AND token<>?').bind(ctv.id,ctv.token).run();
   return json({ok:true})
  }
+ if(path==='/api/sales/hotels'&&req.method==='GET')return ctvSalesHotels(env);
+ if(path==='/api/sales/hotel'&&req.method==='GET')return ctvSalesHotel(env,u.searchParams.get('name')||'');
  return json({error:'Không tìm thấy.'},404)
 }
 // Quản lý CTV trong trang quản trị (Chủ hoặc nhân viên có quyền ctv.manage)
@@ -1162,6 +1164,119 @@ async function ctvPriceApi(req,env,path,u,actor){
  }
  return json({error:'Không hỗ trợ.'},405)
 }
+// ---- CTV: bật/tắt dịch vụ, tình trạng phòng, và dữ liệu giá cho trang CTV ----
+const todayVnYmd=()=>new Date(Date.now()+7*3600000).toISOString().slice(0,10);
+const ctvIsDate=s=>{const m=/^(\d{4})-(\d\d)-(\d\d)$/.exec(s||'');if(!m)return false;const d=new Date(Date.UTC(+m[1],+m[2]-1,+m[3]));return d.getUTCFullYear()===+m[1]&&d.getUTCMonth()===+m[2]-1&&d.getUTCDate()===+m[3]};
+// Khóa dịch vụ: "hotel:tên khách sạn". Sau này thêm "ticket:", "tour:", "combo:" cùng cách.
+const ctvSvcKey=(type,name)=>type+':'+ctvHk(name);
+async function ctvAllRates(env){
+ const {results}=await env.BOOKINGS.prepare("SELECT key,value FROM booking_settings WHERE key LIKE 'rates:%'").all();
+ const out=[];
+ for(const r of results){try{const v=JSON.parse(r.value);if(v&&typeof v.name==='string'&&Array.isArray(v.rows))out.push(v)}catch{}}
+ return out.sort((a,b)=>a.name.localeCompare(b.name,'vi'))
+}
+async function ctvHiddenSet(env){const v=await ctvSetting(env,'ctv:hidden');return new Set(Array.isArray(v)?v.filter(x=>typeof x==='string'):[])}
+async function ctvGetAvail(env,name){
+ const v=await ctvSetting(env,'ctvavail:'+ctvHk(name));
+ const days={};
+ if(v&&v.days&&typeof v.days==='object')for(const [d,e] of Object.entries(v.days)){
+  if(!ctvIsDate(d)||!e||typeof e!=='object')continue;
+  const s=e.s==='o'||e.s==='c'?e.s:'',m=Number.isInteger(e.m)&&e.m>=2&&e.m<=30?e.m:0;
+  if(s||m)days[d]={...(s?{s}:{}),...(m?{m}:{})}
+ }
+ return days
+}
+// Quản lý dịch vụ hiển thị và tình trạng phòng (trang quản trị)
+async function ctvSvcApi(req,env,path,u,actor){
+ const isSvc=path==='/api/ctv/services';
+ if(!can(actor,isSvc?'ctv.price':'ctv.avail'))return noPerm();
+ if(!env.BOOKINGS)return json({error:'Chưa kết nối kho đơn hàng.'},503);
+ const readJson=async max=>{if(Number(req.headers.get('content-length')||0)>max)return null;try{const i=await req.json();return i&&typeof i==='object'&&!Array.isArray(i)?i:null}catch{return null}};
+ const save=(key,val)=>env.BOOKINGS.prepare('INSERT INTO booking_settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').bind(key,JSON.stringify(val)).run();
+ const today=todayVnYmd();
+ if(isSvc){
+  const recs=await ctvAllRates(env),hidden=await ctvHiddenSet(env);
+  const items=recs.map(r=>({key:ctvSvcKey('hotel',r.name),type:'hotel',name:r.name,rows:ctvGroupRows(r.rows).length,last:r.rows.reduce((m,x)=>x.to>m?x.to:m,''),visible:!hidden.has(ctvSvcKey('hotel',r.name))}));
+  if(req.method==='GET')return json({items,today});
+  if(req.method==='PUT'){
+   const i=await readJson(100000);
+   if(!i||!Array.isArray(i.keys)||!i.keys.length||i.keys.length>1000||typeof i.visible!=='boolean')return json({error:'Yêu cầu không hợp lệ.'},400);
+   const valid=new Set(items.map(x=>x.key));
+   if(!i.keys.every(k=>typeof k==='string'&&valid.has(k)))return json({error:'Có dịch vụ không tồn tại.'},400);
+   for(const k of i.keys){if(i.visible)hidden.delete(k);else hidden.add(k)}
+   // Chỉ giữ khóa còn tồn tại để danh sách không phình ra
+   await save('ctv:hidden',[...hidden].filter(k=>valid.has(k)));
+   const names=items.filter(x=>i.keys.includes(x.key)).map(x=>x.name);
+   await logAudit(env,actor,'ctv.service','',(i.visible?'Hiện cho CTV: ':'Ẩn khỏi CTV: ')+names.slice(0,5).join(', ')+(names.length>5?' và '+(names.length-5)+' khách sạn nữa':''));
+   return json({items:items.map(x=>i.keys.includes(x.key)?{...x,visible:i.visible}:x)})
+  }
+  return json({error:'Không hỗ trợ.'},405)
+ }
+ // Tình trạng phòng: mỗi khách sạn một bảng ngày. s: o = còn phòng, c = hết phòng, không có = hỏi lại. m = số đêm tối thiểu.
+ const recs=await ctvAllRates(env);
+ if(req.method==='GET'){
+  const want=u.searchParams.get('hotel');
+  if(want){
+   const rec=recs.find(r=>ctvHk(r.name)===ctvHk(want));if(!rec)return json({error:'Không tìm thấy khách sạn.'},404);
+   return json({hotel:rec.name,today,days:await ctvGetAvail(env,rec.name)})
+  }
+  const list=[];
+  for(const r of recs){const d=await ctvGetAvail(env,r.name);list.push({name:r.name,tracked:Object.keys(d).filter(x=>x>=today).length})}
+  return json({hotels:list,today})
+ }
+ if(req.method==='PUT'){
+  const i=await readJson(200000);if(!i||typeof i.hotel!=='string'||!i.days||typeof i.days!=='object'||Array.isArray(i.days))return json({error:'Yêu cầu không hợp lệ.'},400);
+  const rec=recs.find(r=>ctvHk(r.name)===ctvHk(i.hotel));if(!rec)return json({error:'Không tìm thấy khách sạn.'},404);
+  const entries=Object.entries(i.days);if(entries.length>800)return json({error:'Tối đa 800 ngày mỗi khách sạn.'},400);
+  const days={};
+  for(const [d,e] of entries){
+   if(!ctvIsDate(d)||!e||typeof e!=='object'||Array.isArray(e))return json({error:'Có ngày không hợp lệ.'},400);
+   const s=e.s===undefined||e.s===''?'':e.s,m=e.m===undefined||e.m===null||e.m===0?0:e.m;
+   if(s!==''&&s!=='o'&&s!=='c')return json({error:'Tình trạng phòng không hợp lệ.'},400);
+   if(m!==0&&(!Number.isInteger(m)||m<2||m>30))return json({error:'Số đêm tối thiểu từ 2 đến 30.'},400);
+   if(d<today)continue; // ngày đã qua không cần giữ
+   if(s||m)days[d]={...(s?{s}:{}),...(m?{m}:{})}
+  }
+  await save('ctvavail:'+ctvHk(rec.name),{days});
+  await logAudit(env,actor,'ctv.avail',rec.name,Object.keys(days).length+' ngày có thiết lập');
+  return json({hotel:rec.name,today,days})
+ }
+ return json({error:'Không hỗ trợ.'},405)
+}
+// ---- Dữ liệu cho trang CTV: chỉ giá CTV, tuyệt đối không có giá net, đối tác hay cờ nhập tay ----
+async function ctvVisibleHotels(env){
+ const recs=await ctvAllRates(env),hidden=await ctvHiddenSet(env),today=todayVnYmd(),rule=await ctvGetRule(env),out=[];
+ for(const rec of recs){
+  if(hidden.has(ctvSvcKey('hotel',rec.name)))continue;
+  const cfg=await ctvGetHotelCfg(env,rec.name);
+  const rows=ctvComputeRows(rec,cfg,rule,false).filter(r=>r.to>=today).map(r=>({room:r.room,label:r.label,from:r.from,to:r.to,ctv:r.ctv,ctvSat:r.ctvSat}));
+  if(rows.length)out.push({rec,rows})
+ }
+ return out
+}
+async function ctvSalesHotels(env){
+ const list=await ctvVisibleHotels(env),out=[];
+ for(const {rec,rows} of list){
+  const avail=await ctvGetAvail(env,rec.name);
+  out.push({name:rec.name,from:Math.min(...rows.map(r=>r.ctv)),rooms:new Set(rows.map(r=>ctvHk(r.room))).size,tracked:Object.keys(avail).some(d=>d>=todayVnYmd())})
+ }
+ return json({hotels:out})
+}
+async function ctvSalesHotel(env,name){
+ const hit=(await ctvVisibleHotels(env)).find(x=>ctvHk(x.rec.name)===ctvHk(name));
+ if(!hit)return json({error:'Không tìm thấy khách sạn.'},404);
+ const today=todayVnYmd(),avail=await ctvGetAvail(env,hit.rec.name),days={};
+ for(const [d,e] of Object.entries(avail))if(d>=today)days[d]=e;
+ const info=(await ctvSetting(env,'hotels'));
+ const meta=Array.isArray(info)?info.find(h=>h&&ctvHk(h.name)===ctvHk(hit.rec.name)):null;
+ let photos=[];
+ try{
+  await ensureQuickTables(env);
+  const {results}=await env.DB.prepare('SELECT id,album,label,url FROM quick_photos ORDER BY created DESC LIMIT 3000').all();
+  photos=results.filter(p=>ctvHk(p.album)===ctvHk(hit.rec.name)).slice(0,60).map(p=>({id:p.id,label:p.label||'',url:p.url}))
+ }catch{}
+ return json({hotel:{name:hit.rec.name,note:typeof hit.rec.note==='string'?hit.rec.note:'',address:meta&&typeof meta.address==='string'?meta.address:'',rows:hit.rows,avail:days,photos,today}})
+}
 async function handle(req,env){const u=new URL(req.url),path=u.pathname;
 if(path.startsWith('/media/')){if(req.method!=='GET')return json({error:'Không hỗ trợ.'},405);const key=path.slice(7);if(!/^[a-zA-Z0-9._-]+$/.test(key))return new Response('Not found',{status:404});if(!env.MEDIA)return new Response('Not configured',{status:503});const o=await env.MEDIA.get(key);if(!o)return new Response('Not found',{status:404});return new Response(o.body,{headers:{'content-type':o.httpMetadata?.contentType||'application/octet-stream','cache-control':'public,max-age=31536000,immutable','x-content-type-options':'nosniff'}})}
 if(!path.startsWith('/api/')){const response=await env.ASSETS.fetch(req);const headers=new Headers(response.headers);headers.set('X-Content-Type-Options','nosniff');headers.set('Referrer-Policy','strict-origin-when-cross-origin');headers.set('Content-Security-Policy',path.startsWith('/admin/booking')?BOOKING_CSP:CSP);if(path.startsWith('/admin'))headers.set('Cache-Control','no-store');if(path==='/sales'||path.startsWith('/sales/')){headers.set('Cache-Control','no-store');headers.set('X-Robots-Tag','noindex, nofollow')}return new Response(response.body,{status:response.status,headers})}
@@ -1202,6 +1317,7 @@ if(!actor.owner&&!/^\/api\/(booking|booking-qr|booking-settings|booking-units|ho
 if(path==='/api/staff'||path.startsWith('/api/staff/'))return staffApi(req,env,path,actor,u);
 if(path==='/api/audit'&&req.method==='GET')return auditApi(req,env,u,actor);
 if(path==='/api/ctv/price'||path==='/api/ctv/price/import')return ctvPriceApi(req,env,path,u,actor);
+if(path==='/api/ctv/services'||path==='/api/ctv/avail')return ctvSvcApi(req,env,path,u,actor);
 if(path==='/api/ctv'||path.startsWith('/api/ctv/'))return ctvAdminApi(req,env,path,actor);
 if(path==='/api/content'&&req.method==='GET'){const {results}=await env.DB.prepare('SELECT * FROM content ORDER BY updated DESC').all();return json({items:results.map(x=>({id:x.id,draft:JSON.parse(x.draft),published:x.published?JSON.parse(x.published):null,updated:x.updated}))})}
 if(path==='/api/upload'&&req.method==='POST')return uploadImage(req,env,actor.owner&&u.searchParams.get('big')==='1'?20:5);
