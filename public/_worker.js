@@ -359,13 +359,16 @@ const PERM_CATALOG=[
  ['Thiết lập','rates.view','Xem bảng giá net khách sạn'],
  ['Thiết lập','rates.edit','Sửa bảng giá net khách sạn'],
  ['Thiết lập','settings.edit','Sửa đối tác, danh mục, đơn vị và thiết lập chung'],
- ['Thiết lập','import.run','Nhập dữ liệu từ file Excel']
+ ['Thiết lập','import.run','Nhập dữ liệu từ file Excel'],
+ ['CTV','ctv.manage','Duyệt, khóa CTV và đặt lại mật khẩu CTV'],
+ ['CTV','ctv.price','Sửa giá CTV và bật tắt dịch vụ hiển thị cho CTV'],
+ ['CTV','ctv.avail','Sửa tình trạng phòng và số đêm tối thiểu cho CTV']
 ];
 const PERM_KEYS=PERM_CATALOG.map(x=>x[1]);
 const OWNER_ONLY_PERMS=['staff.manage','audit.view'];
 const ROLE_PERMS={
- accountant:['order.view_all','order.create','order.edit','order.edit_done','order.complete','order.cancel','order.delete_approve','net.access','pay.record','pay.approve','pay.refund','commission.edit','commission.pay','supplier.pay','customer.view_all','customer.create','customer.edit','lead.view_all','lead.assign','lead.edit','debt.view','stats.view','data.export','rates.view','rates.edit','settings.edit','import.run'],
- sales:['order.create','order.edit','order.cancel','order.delete_request','net.access','pay.record','commission.edit','customer.create','customer.edit','lead.edit','stats.view','rates.view']
+ accountant:['order.view_all','order.create','order.edit','order.edit_done','order.complete','order.cancel','order.delete_approve','net.access','pay.record','pay.approve','pay.refund','commission.edit','commission.pay','supplier.pay','customer.view_all','customer.create','customer.edit','lead.view_all','lead.assign','lead.edit','debt.view','stats.view','data.export','rates.view','rates.edit','settings.edit','import.run','ctv.manage','ctv.price','ctv.avail'],
+ sales:['order.create','order.edit','order.cancel','order.delete_request','net.access','pay.record','commission.edit','customer.create','customer.edit','lead.edit','stats.view','rates.view','ctv.price','ctv.avail']
 };
 const ROLE_LABELS={owner:'Chủ',accountant:'Kế toán',sales:'Sales',custom:'Tùy chỉnh'};
 const OWNER_ACTOR_ID='owner';
@@ -783,14 +786,233 @@ async function quickApi(req,env,path){
  }
  return json({error:'Không hỗ trợ.'},405);
 }
+// ---- CTV (cộng tác viên): đăng ký, xác nhận email, đăng nhập, quản lý ----
+// Tài khoản CTV tách hẳn tài khoản nhân viên: cookie riêng, bảng riêng, đường dẫn /api/sales/*.
+// Trạng thái: pending_email (chờ nhập mã OTP) -> pending (chờ Chủ duyệt) -> active; locked = bị khóa.
+const CTV_COOKIE='serene_ctv';
+const CTV_SESSION_SECONDS=7*86400;
+const CTV_EMAIL_RE=/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
+const ctvReady=new WeakMap();
+async function ensureCtvTables(env){
+ let p=ctvReady.get(env.BOOKINGS);
+ if(!p){
+  p=(async()=>{
+   const run=sql=>env.BOOKINGS.prepare(sql).run();
+   await run('CREATE TABLE IF NOT EXISTS ctv_accounts (id TEXT PRIMARY KEY, name TEXT NOT NULL, phone TEXT NOT NULL, zalo TEXT NOT NULL DEFAULT \'\', email TEXT NOT NULL UNIQUE, hash TEXT NOT NULL, status TEXT NOT NULL, email_ok INTEGER NOT NULL DEFAULT 0, otp_hash TEXT NOT NULL DEFAULT \'\', otp_expires INTEGER NOT NULL DEFAULT 0, otp_tries INTEGER NOT NULL DEFAULT 0, otp_sent INTEGER NOT NULL DEFAULT 0, created TEXT NOT NULL, updated TEXT NOT NULL, last_login TEXT NOT NULL DEFAULT \'\')');
+   await run('CREATE TABLE IF NOT EXISTS ctv_sessions (token TEXT PRIMARY KEY, csrf TEXT NOT NULL, expires INTEGER NOT NULL, ctv_id TEXT NOT NULL)');
+  })();
+  ctvReady.set(env.BOOKINGS,p);
+  p.catch(()=>ctvReady.delete(env.BOOKINGS));
+ }
+ await p;
+}
+function ctvCookieValue(req){return new RegExp('(?:^|;\\s*)'+CTV_COOKIE+'=([A-Za-z0-9-]+)').exec(req.headers.get('cookie')||'')?.[1]||''}
+function ctvSessionCookie(value,age,req){return CTV_COOKIE+'='+value+'; Path=/; HttpOnly; SameSite=Strict; Max-Age='+age+(new URL(req.url).protocol==='https:'?'; Secure':'')}
+function ctvAdminView(r){return {id:r.id,name:r.name,phone:r.phone,zalo:r.zalo,email:r.email,status:r.status,emailOk:!!r.email_ok,created:r.created,lastLogin:r.last_login}}
+// Gửi mã OTP bằng email chỉ bật khi đã cài RESEND_API_KEY và MAIL_FROM (cần tên miền đã xác minh trong Resend)
+function ctvOtpEnabled(env){return !!(env.RESEND_API_KEY&&env.MAIL_FROM)}
+async function ctvSendOtpMail(env,to,code){
+ try{
+  const res=await fetch('https://api.resend.com/emails',{method:'POST',headers:{authorization:'Bearer '+env.RESEND_API_KEY,'content-type':'application/json'},body:JSON.stringify({
+   from:env.MAIL_FROM,to:[to],subject:'Mã xác nhận Serene Travel: '+code,
+   text:'Mã xác nhận đăng ký cộng tác viên Serene Travel của bạn là: '+code+'\n\nMã có hiệu lực trong 10 phút. Nếu bạn không đăng ký, hãy bỏ qua email này.'
+  }),signal:AbortSignal.timeout(10000)});
+  return res.ok
+ }catch{return false}
+}
+// Tạo và gửi mã mới. Trả về 'sent' | 'throttled' | 'failed'
+async function ctvIssueOtp(env,row){
+ const now=Date.now();
+ if(now-row.otp_sent<60000)return 'throttled';
+ const buf=new Uint32Array(1);crypto.getRandomValues(buf);
+ const code=String(buf[0]%1000000).padStart(6,'0');
+ await env.BOOKINGS.prepare('UPDATE ctv_accounts SET otp_hash=?,otp_expires=?,otp_tries=0,otp_sent=?,updated=? WHERE id=?').bind(await sha(code+':'+row.id),now+600000,now,new Date().toISOString(),row.id).run();
+ return await ctvSendOtpMail(env,row.email,code)?'sent':'failed'
+}
+// Đếm lượt thử theo khóa; trả về true nếu vượt giới hạn
+async function ctvBump(env,key,ttlMs,max){
+ await env.DB.prepare('INSERT INTO attempts(key,count,expires) VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET count=count+1').bind(key,Date.now()+ttlMs).run();
+ const row=await env.DB.prepare('SELECT count FROM attempts WHERE key=?').bind(key).first();
+ return (row?.count||0)>max
+}
+// Người đang đăng nhập trang CTV (chỉ tài khoản đã duyệt)
+async function resolveCtv(req,env){
+ const token=ctvCookieValue(req);if(!token||!env.BOOKINGS)return null;
+ try{
+  await ensureCtvTables(env);
+  const th=await sha(token);
+  const r=await env.BOOKINGS.prepare('SELECT s.csrf,s.expires,t.id,t.name,t.email,t.status FROM ctv_sessions s JOIN ctv_accounts t ON t.id=s.ctv_id WHERE s.token=?').bind(th).first();
+  if(!r||r.expires<Date.now()||r.status!=='active')return null;
+  return {id:r.id,name:r.name,email:r.email,csrf:r.csrf,token:th}
+ }catch{return null}
+}
+async function salesApi(req,env,path,u){
+ if(!env.BOOKINGS||!env.DB)return json({error:'Chưa sẵn sàng.'},503);
+ await ensureCtvTables(env);
+ const ip=await sha(req.headers.get('CF-Connecting-IP')||'local'),hour=Math.floor(Date.now()/3600000),quarter=Math.floor(Date.now()/900000);
+ const readBody=async(max=4000)=>{
+  if(Number(req.headers.get('content-length')||0)>max)return null;
+  try{const i=await req.json();return i&&typeof i==='object'&&!Array.isArray(i)?i:null}catch{return null}
+ };
+ const mailOf=x=>typeof x==='string'&&x.trim().length<=80&&CTV_EMAIL_RE.test(x.trim())?x.trim().toLowerCase():null;
+ const goodPass=x=>typeof x==='string'&&x.length>=8&&x.length<=128;
+ const invalid=()=>json({error:'Yêu cầu không hợp lệ.'},400);
+ if(path==='/api/sales/register'&&req.method==='POST'){
+  const i=await readBody();if(!i)return invalid();
+  if(i.website)return json({ok:true,next:'wait'});
+  if(await ctvBump(env,'ctv:reg:ip:'+ip+':'+hour,2*3600000,8)||await ctvBump(env,'ctv:reg:all:'+hour,2*3600000,150))return json({error:'Bạn đăng ký quá nhiều lần. Vui lòng thử lại sau.'},429);
+  const name=cleanLine(i.name,60,true),phone=typeof i.phone==='string'?i.phone.replace(/[\s().-]/g,''):'',zalo=i.zalo===undefined||i.zalo===''?'':cleanLine(i.zalo,30),email=mailOf(i.email);
+  if(!name)return json({error:'Vui lòng nhập họ tên.'},400);
+  if(!VN_PHONE_RE.test(phone))return json({error:'Số điện thoại chưa đúng.'},400);
+  if(zalo===null)return json({error:'Zalo chưa đúng.'},400);
+  if(!email)return json({error:'Email chưa đúng.'},400);
+  if(email===EMAIL)return json({error:'Email này không dùng được.'},400);
+  if(!goodPass(i.password))return json({error:'Mật khẩu cần từ 8 đến 128 ký tự.'},400);
+  const otpOn=ctvOtpEnabled(env);
+  const old=await env.BOOKINGS.prepare('SELECT * FROM ctv_accounts WHERE email=?').bind(email).first();
+  if(old){
+   // Đã đăng ký nhưng chưa nhập mã: cho gửi lại mã, không đổi mật khẩu đã đặt
+   if(old.status==='pending_email'&&otpOn){await ctvIssueOtp(env,old);return json({ok:true,next:'verify'})}
+   return json({error:'Email này đã đăng ký. Hãy đăng nhập hoặc nhắn Zalo cho Serene.'},409)
+  }
+  const cnt=await env.BOOKINGS.prepare('SELECT COUNT(*) AS n FROM ctv_accounts').first();if((cnt?.n||0)>=5000)return json({error:'Tạm thời chưa nhận thêm đăng ký.'},503);
+  const id='k'+hex(crypto.getRandomValues(new Uint8Array(6))),now=new Date().toISOString();
+  await env.BOOKINGS.prepare('INSERT INTO ctv_accounts(id,name,phone,zalo,email,hash,status,email_ok,created,updated) VALUES(?,?,?,?,?,?,?,0,?,?)').bind(id,name,phone,zalo||'',email,await makePasswordHash(i.password),otpOn?'pending_email':'pending',now,now).run();
+  if(otpOn){
+   const row=await env.BOOKINGS.prepare('SELECT * FROM ctv_accounts WHERE id=?').bind(id).first();
+   const sent=await ctvIssueOtp(env,row);
+   if(sent==='failed')return json({ok:true,next:'verify',warn:'Chưa gửi được email. Bấm "Gửi lại mã" sau ít phút.'},201);
+   return json({ok:true,next:'verify'},201)
+  }
+  return json({ok:true,next:'wait'},201)
+ }
+ if(path==='/api/sales/verify'&&req.method==='POST'){
+  const i=await readBody();if(!i)return invalid();
+  const email=mailOf(i.email),code=typeof i.code==='string'?i.code.trim():'';
+  if(!email||!/^\d{6}$/.test(code))return json({error:'Mã gồm 6 chữ số.'},400);
+  if(await ctvBump(env,'ctv:otp:ip:'+ip+':'+hour,2*3600000,30))return json({error:'Bạn thử quá nhiều lần. Vui lòng thử lại sau.'},429);
+  const row=await env.BOOKINGS.prepare('SELECT * FROM ctv_accounts WHERE email=?').bind(email).first();
+  const wrong=()=>json({error:'Mã chưa đúng hoặc đã hết hạn.'},400);
+  if(!row||row.status!=='pending_email'||!row.otp_hash)return wrong();
+  if(row.otp_tries>=5)return json({error:'Bạn nhập sai quá nhiều lần. Bấm "Gửi lại mã" để nhận mã mới.'},429);
+  if(row.otp_expires<Date.now()){return wrong()}
+  if(!equal(await sha(code+':'+row.id),row.otp_hash)){
+   await env.BOOKINGS.prepare('UPDATE ctv_accounts SET otp_tries=otp_tries+1 WHERE id=?').bind(row.id).run();
+   return wrong()
+  }
+  await env.BOOKINGS.prepare("UPDATE ctv_accounts SET status='pending',email_ok=1,otp_hash='',otp_expires=0,otp_tries=0,updated=? WHERE id=?").bind(new Date().toISOString(),row.id).run();
+  return json({ok:true,next:'wait'})
+ }
+ if(path==='/api/sales/resend'&&req.method==='POST'){
+  const i=await readBody();if(!i)return invalid();
+  const email=mailOf(i.email);
+  if(await ctvBump(env,'ctv:resend:ip:'+ip+':'+hour,2*3600000,10))return json({error:'Bạn yêu cầu quá nhiều lần. Vui lòng thử lại sau.'},429);
+  // Luôn trả lời giống nhau để không lộ email nào đã đăng ký
+  if(email&&ctvOtpEnabled(env)){
+   const row=await env.BOOKINGS.prepare("SELECT * FROM ctv_accounts WHERE email=? AND status='pending_email'").bind(email).first();
+   if(row)await ctvIssueOtp(env,row)
+  }
+  return json({ok:true})
+ }
+ if(path==='/api/sales/login'&&req.method==='POST'){
+  const i=await readBody();if(!i)return invalid();
+  if(await ctvBump(env,'ctv:login:ip:'+ip+':'+quarter,900000,10)||await ctvBump(env,'ctv:login:all:'+quarter,900000,100))return json({error:'Đã thử quá nhiều lần. Vui lòng đợi 15 phút.'},429);
+  const email=mailOf(i.email),pass=typeof i.password==='string'?i.password:'';
+  const bad=()=>json({error:'Email hoặc mật khẩu chưa đúng.'},401);
+  if(!email||pass.length>256)return bad();
+  const row=await env.BOOKINGS.prepare('SELECT * FROM ctv_accounts WHERE email=?').bind(email).first();
+  const ok=await passwordOK(pass,row?row.hash:'0:'+'0'.repeat(64));
+  if(!row||!ok)return bad();
+  if(row.status==='pending_email')return json({error:'Bạn chưa xác nhận email. Nhập mã OTP đã gửi về email.',needVerify:true},403);
+  if(row.status==='pending')return json({error:'Tài khoản đang chờ Serene duyệt. Chúng tôi sẽ báo cho bạn sớm.'},403);
+  if(row.status!=='active')return json({error:'Tài khoản đã bị khóa. Vui lòng liên hệ Serene.'},403);
+  const token=crypto.randomUUID()+'-'+crypto.randomUUID(),csrf=crypto.randomUUID(),now=new Date().toISOString();
+  await env.BOOKINGS.prepare('INSERT INTO ctv_sessions(token,csrf,expires,ctv_id) VALUES(?,?,?,?)').bind(await sha(token),csrf,Date.now()+CTV_SESSION_SECONDS*1000,row.id).run();
+  await env.BOOKINGS.prepare('DELETE FROM ctv_sessions WHERE expires<?').bind(Date.now()).run();
+  await env.DB.prepare('DELETE FROM attempts WHERE expires<?').bind(Date.now()).run();
+  await env.BOOKINGS.prepare('UPDATE ctv_accounts SET last_login=? WHERE id=?').bind(now,row.id).run();
+  return json({name:row.name,email:row.email,csrf},200,{'set-cookie':ctvSessionCookie(token,CTV_SESSION_SECONDS,req)})
+ }
+ // Các đường dẫn còn lại cần đăng nhập
+ const ctv=await resolveCtv(req,env);
+ if(!ctv)return json({error:'Vui lòng đăng nhập.'},401,ctvCookieValue(req)?{'set-cookie':ctvSessionCookie('',0,req)}:{});
+ if(req.method!=='GET'&&req.headers.get('x-csrf-token')!==ctv.csrf)return json({error:'Phiên đăng nhập không hợp lệ. Hãy đăng nhập lại.'},403);
+ if(path==='/api/sales/me'&&req.method==='GET')return json({name:ctv.name,email:ctv.email,csrf:ctv.csrf});
+ if(path==='/api/sales/logout'&&req.method==='POST'){
+  await env.BOOKINGS.prepare('DELETE FROM ctv_sessions WHERE token=?').bind(ctv.token).run();
+  return json({ok:true},200,{'set-cookie':ctvSessionCookie('',0,req)})
+ }
+ if(path==='/api/sales/password'&&req.method==='POST'){
+  const i=await readBody();if(!i)return invalid();
+  if(!goodPass(i.next))return json({error:'Mật khẩu mới cần từ 8 đến 128 ký tự.'},400);
+  const row=await env.BOOKINGS.prepare('SELECT hash FROM ctv_accounts WHERE id=?').bind(ctv.id).first();
+  if(!row||typeof i.current!=='string'||i.current.length>128||!await passwordOK(i.current,row.hash))return json({error:'Mật khẩu hiện tại chưa đúng.'},400);
+  await env.BOOKINGS.prepare('UPDATE ctv_accounts SET hash=?,updated=? WHERE id=?').bind(await makePasswordHash(i.next),new Date().toISOString(),ctv.id).run();
+  await env.BOOKINGS.prepare('DELETE FROM ctv_sessions WHERE ctv_id=? AND token<>?').bind(ctv.id,ctv.token).run();
+  return json({ok:true})
+ }
+ return json({error:'Không tìm thấy.'},404)
+}
+// Quản lý CTV trong trang quản trị (Chủ hoặc nhân viên có quyền ctv.manage)
+async function ctvAdminApi(req,env,path,actor){
+ if(!can(actor,'ctv.manage'))return noPerm();
+ if(!env.BOOKINGS)return json({error:'Chưa kết nối kho đơn hàng.'},503);
+ await ensureCtvTables(env);
+ const m=/^\/api\/ctv(?:\/(k[0-9a-f]{12}))?$/.exec(path);if(!m)return json({error:'Không tìm thấy.'},404);
+ const id=m[1];
+ if(req.method==='GET'&&!id){
+  const {results}=await env.BOOKINGS.prepare("SELECT * FROM ctv_accounts ORDER BY CASE status WHEN 'pending' THEN 0 WHEN 'pending_email' THEN 1 WHEN 'active' THEN 2 ELSE 3 END, created DESC").all();
+  return json({ctvs:results.map(ctvAdminView),pending:results.filter(r=>r.status==='pending').length,otp:ctvOtpEnabled(env)})
+ }
+ if(!id)return json({error:'Không hỗ trợ.'},405);
+ const row=await env.BOOKINGS.prepare('SELECT * FROM ctv_accounts WHERE id=?').bind(id).first();
+ if(!row)return json({error:'Không tìm thấy CTV.'},404);
+ const now=new Date().toISOString(),label=row.name+' <'+row.email+'>';
+ if(req.method==='PUT'){
+  if(Number(req.headers.get('content-length')||0)>2000)return json({error:'Dữ liệu quá lớn.'},413);
+  let i;try{i=await req.json()}catch{return json({error:'Nội dung không hợp lệ.'},400)}
+  const action=i?.action;
+  if(action==='approve'){
+   if(row.status!=='pending'&&row.status!=='pending_email')return json({error:'CTV này không ở trạng thái chờ duyệt.'},400);
+   // Khi bật OTP, chưa xác nhận email thì chưa duyệt được
+   if(row.status==='pending_email'&&ctvOtpEnabled(env))return json({error:'CTV chưa xác nhận email bằng mã OTP.'},400);
+   await env.BOOKINGS.prepare("UPDATE ctv_accounts SET status='active',updated=? WHERE id=?").bind(now,id).run();
+   await logAudit(env,actor,'ctv.approve',id,label)
+  }else if(action==='lock'){
+   if(row.status!=='active')return json({error:'Chỉ khóa được CTV đang hoạt động.'},400);
+   await env.BOOKINGS.prepare("UPDATE ctv_accounts SET status='locked',updated=? WHERE id=?").bind(now,id).run();
+   await env.BOOKINGS.prepare('DELETE FROM ctv_sessions WHERE ctv_id=?').bind(id).run();
+   await logAudit(env,actor,'ctv.lock',id,label)
+  }else if(action==='unlock'){
+   if(row.status!=='locked')return json({error:'CTV này không bị khóa.'},400);
+   await env.BOOKINGS.prepare("UPDATE ctv_accounts SET status='active',updated=? WHERE id=?").bind(now,id).run();
+   await logAudit(env,actor,'ctv.unlock',id,label)
+  }else if(action==='password'){
+   if(typeof i.password!=='string'||i.password.length<8||i.password.length>128)return json({error:'Mật khẩu cần từ 8 đến 128 ký tự.'},400);
+   await env.BOOKINGS.prepare('UPDATE ctv_accounts SET hash=?,updated=? WHERE id=?').bind(await makePasswordHash(i.password),now,id).run();
+   await env.BOOKINGS.prepare('DELETE FROM ctv_sessions WHERE ctv_id=?').bind(id).run();
+   await logAudit(env,actor,'ctv.password',id,label)
+  }else return json({error:'Thao tác không hợp lệ.'},400);
+  return json({ctv:ctvAdminView(await env.BOOKINGS.prepare('SELECT * FROM ctv_accounts WHERE id=?').bind(id).first())})
+ }
+ if(req.method==='DELETE'){
+  if(row.status==='active')return json({error:'Hãy khóa CTV trước rồi mới xóa.'},400);
+  await env.BOOKINGS.prepare('DELETE FROM ctv_sessions WHERE ctv_id=?').bind(id).run();
+  await env.BOOKINGS.prepare('DELETE FROM ctv_accounts WHERE id=?').bind(id).run();
+  await logAudit(env,actor,'ctv.delete',id,label);
+  return json({ok:true})
+ }
+ return json({error:'Không hỗ trợ.'},405)
+}
 async function handle(req,env){const u=new URL(req.url),path=u.pathname;
 if(path.startsWith('/media/')){if(req.method!=='GET')return json({error:'Không hỗ trợ.'},405);const key=path.slice(7);if(!/^[a-zA-Z0-9._-]+$/.test(key))return new Response('Not found',{status:404});if(!env.MEDIA)return new Response('Not configured',{status:503});const o=await env.MEDIA.get(key);if(!o)return new Response('Not found',{status:404});return new Response(o.body,{headers:{'content-type':o.httpMetadata?.contentType||'application/octet-stream','cache-control':'public,max-age=31536000,immutable','x-content-type-options':'nosniff'}})}
-if(!path.startsWith('/api/')){const response=await env.ASSETS.fetch(req);const headers=new Headers(response.headers);headers.set('X-Content-Type-Options','nosniff');headers.set('Referrer-Policy','strict-origin-when-cross-origin');headers.set('Content-Security-Policy',path.startsWith('/admin/booking')?BOOKING_CSP:CSP);if(path.startsWith('/admin'))headers.set('Cache-Control','no-store');return new Response(response.body,{status:response.status,headers})}
+if(!path.startsWith('/api/')){const response=await env.ASSETS.fetch(req);const headers=new Headers(response.headers);headers.set('X-Content-Type-Options','nosniff');headers.set('Referrer-Policy','strict-origin-when-cross-origin');headers.set('Content-Security-Policy',path.startsWith('/admin/booking')?BOOKING_CSP:CSP);if(path.startsWith('/admin'))headers.set('Cache-Control','no-store');if(path==='/sales'||path.startsWith('/sales/')){headers.set('Cache-Control','no-store');headers.set('X-Robots-Tag','noindex, nofollow')}return new Response(response.body,{status:response.status,headers})}
 if(!env.DB)return json({error:'Chưa kết nối kho nội dung Cloudflare.'},503);
 if(path==='/api/public'&&req.method==='GET'){const {results}=await env.DB.prepare('SELECT id,published,updated FROM content WHERE published IS NOT NULL').all();return json({items:results.map(x=>({id:x.id,...JSON.parse(x.published),updated:x.updated}))})}
 if(path.startsWith('/api/machine/'))return machineApi(req,env,path,u);
 if(req.method!=='GET'&&req.headers.get('origin')!==u.origin)return json({error:'Yêu cầu không hợp lệ.'},403);
 if(path==='/api/lead-public'&&req.method==='POST')return publicLead(req,env);
+if(path==='/api/sales'||path.startsWith('/api/sales/'))return salesApi(req,env,path,u);
 if(path==='/api/login'&&req.method==='POST'){
  if(!env.ADMIN_PASSWORD_HASH)return json({error:'Chưa thiết lập tài khoản quản trị.'},503);
  if(Number(req.headers.get('content-length')||0)>4096)return json({error:'Yêu cầu quá lớn.'},413);
@@ -818,9 +1040,10 @@ if(path==='/api/me/password'&&req.method==='POST'){
  await logAudit(env,actor,'staff.password',actor.id,'Tự đổi mật khẩu');
  return json({ok:true})
 }
-if(!actor.owner&&!/^\/api\/(booking|booking-qr|booking-settings|booking-units|hotel-rates|customers|leads|staff|audit)(\/|$)/.test(path))return noPerm('Tài khoản nhân viên không vào được phần này.');
+if(!actor.owner&&!/^\/api\/(booking|booking-qr|booking-settings|booking-units|hotel-rates|customers|leads|staff|audit|ctv)(\/|$)/.test(path))return noPerm('Tài khoản nhân viên không vào được phần này.');
 if(path==='/api/staff'||path.startsWith('/api/staff/'))return staffApi(req,env,path,actor,u);
 if(path==='/api/audit'&&req.method==='GET')return auditApi(req,env,u,actor);
+if(path==='/api/ctv'||path.startsWith('/api/ctv/'))return ctvAdminApi(req,env,path,actor);
 if(path==='/api/content'&&req.method==='GET'){const {results}=await env.DB.prepare('SELECT * FROM content ORDER BY updated DESC').all();return json({items:results.map(x=>({id:x.id,draft:JSON.parse(x.draft),published:x.published?JSON.parse(x.published):null,updated:x.updated}))})}
 if(path==='/api/upload'&&req.method==='POST')return uploadImage(req,env,actor.owner&&u.searchParams.get('big')==='1'?20:5);
 if(path==='/api/booking-qr'&&req.method==='GET'){
