@@ -501,6 +501,19 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
   <div class="card set-page" data-page="data">
     <div class="sec-title"><i class="ti ti-database"></i>Dữ liệu</div>
     <button class="btn-outline" style="width:100%" onclick="downloadCSV()"><i class="ti ti-file-spreadsheet"></i>Tải bảng đơn hàng (CSV, mở bằng Excel / Google Sheets)</button>
+    <div style="margin-top:16px;padding-top:14px;border-top:.5px dashed rgba(58,125,153,.25)">
+      <div class="sec-title"><i class="ti ti-file-import"></i>Nhập nhiều đơn từ file</div>
+      <div style="font-size:12.5px;color:#5B7285;line-height:1.5;margin-bottom:10px">
+        1. Tải file mẫu, mở bằng Excel hoặc Google Sheets.<br>
+        2. Mỗi dòng là một dịch vụ. Các dòng cùng <b>Nhóm đơn</b> (ví dụ A1, A2) gộp thành một đơn. Xóa các dòng VÍ DỤ.<br>
+        3. Cột ngày nên đặt định dạng Văn bản để không mất số 0 đầu.<br>
+        4. Lưu thành <b>CSV UTF-8</b>, chọn file ở dưới, xem trước rồi bấm Nhập.<br>
+        Loại dịch vụ và Đối tác phải gõ đúng tên đã có trong Cài đặt.
+      </div>
+      <button class="btn-outline" style="width:100%;margin-bottom:8px" onclick="downloadImportTemplate()"><i class="ti ti-download"></i>Tải file mẫu nhập đơn</button>
+      <input type="file" id="imp-file" accept=".csv,text/csv,.txt" onchange="importPick(this)" style="width:100%;margin-bottom:8px">
+      <div id="imp-preview"></div>
+    </div>
   </div>
 </div>
 
@@ -2122,6 +2135,66 @@ async function delBooking(id){
   renderList(); toast("Đã xóa "+id);
 }
 
+// ── Nhập nhiều đơn từ file CSV ──
+let impPlan=null;
+function downloadImportTemplate(){
+  const blob=new Blob([BK.importTemplateCsv(catList,partners)],{type:"text/csv;charset=utf-8"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="serene-mau-nhap-don.csv";
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+}
+function todayVn(){ const n=new Date(); return String(n.getDate()).padStart(2,"0")+"/"+String(n.getMonth()+1).padStart(2,"0")+"/"+n.getFullYear(); }
+function importPick(inp){
+  const f=inp.files&&inp.files[0]; impPlan=null; $("imp-preview").innerHTML="";
+  if(!f) return;
+  if(f.size>2000000){ toast("File quá lớn (tối đa 2 MB)",4000); return; }
+  const rd=new FileReader();
+  rd.onload=()=>{
+    const text=String(rd.result||"");
+    if(text.includes("\uFFFD")){ $("imp-preview").innerHTML='<div class="warn-box">File bị lỗi font tiếng Việt. Trong Excel chọn Lưu thành, loại <b>CSV UTF-8 (Comma delimited)</b>, rồi chọn lại file.</div>'; return; }
+    const r=BK.buildImport(BK.parseCsv(text),{cats:catList,partners,today:todayVn()});
+    if(r.fatal){ $("imp-preview").innerHTML='<div class="warn-box">'+esc(r.fatal)+'</div>'; return; }
+    const have=new Set(bookings.map(b=>b.ref).filter(Boolean));
+    const dup=r.orders.filter(o=>o.ref&&have.has(o.ref)), fresh=r.orders.filter(o=>!(o.ref&&have.has(o.ref)));
+    impPlan={orders:fresh};
+    const money=fresh.reduce((a,o)=>a+o.totalAmt,0);
+    $("imp-preview").innerHTML=`<div class="card" style="margin:0 0 8px;padding:10px 12px">
+      <div style="font-size:13px"><b>${fresh.length}</b> đơn sẵn sàng nhập, tổng ${VND(money)}${r.skipped?` · bỏ qua ${r.skipped} dòng ví dụ`:""}${dup.length?` · <b>${dup.length}</b> đơn đã nhập trước đó (trùng Mã tham chiếu) sẽ bỏ qua`:""}</div>
+      ${r.errors.length?`<div class="warn-box" style="margin-top:8px"><b>${r.badOrders} đơn có lỗi, sẽ không được nhập.</b> Sửa file rồi chọn lại, hoặc nhập các đơn đúng trước.<br>${r.errors.slice(0,25).map(e=>"Dòng "+e.line+": "+esc(e.msg)).join("<br>")}${r.errors.length>25?"<br>... và "+(r.errors.length-25)+" lỗi khác":""}</div>`:""}
+      ${fresh.slice(0,8).map(o=>`<div class="sup-ord"><span>${esc(o.name)} · ${esc(o.created)} · ${BK.ORDER_STATUS_LABELS[o.orderStatus]}</span><span>${VNDn(o.totalAmt)} đ</span></div>`).join("")}${fresh.length>8?`<div style="font-size:12px;color:#7A8FA0">... và ${fresh.length-8} đơn khác</div>`:""}
+      ${fresh.length?`<button class="btn-main" style="margin-top:10px" onclick="importRun()"><i class="ti ti-file-import"></i>Nhập ${fresh.length} đơn</button>`:""}
+    </div>`;
+  };
+  rd.readAsText(f,"utf-8");
+}
+function importRun(){
+  if(!impPlan||!impPlan.orders.length) return;
+  const n=impPlan.orders.length;
+  askConfirm(`Nhập <b>${n}</b> đơn vào hệ thống?<div class="pay-modal-sub">Nhập xong không có nút hoàn tác hàng loạt. Muốn xóa phải xóa từng đơn.</div>`,async()=>{
+    const orders=impPlan.orders; impPlan=null;
+    const box=$("imp-preview"); let ok=0, fail=0;
+    for(const o of orders){
+      box.innerHTML=`<div style="font-size:13px">Đang nhập ${ok+fail+1} / ${orders.length}...</div>`;
+      const cid=await resolveCustomer(o.name,o.phone,true);
+      const bk={id:genId(),name:o.name,phone:o.phone,guests:"",svcs:o.svcs,totalAmt:o.totalAmt,created:o.created,payments:[],status:o.paid>=o.totalAmt?"done":o.paid>0?"partial":"pending",orderStatus:o.orderStatus};
+      if(o.ref) bk.ref=o.ref;
+      if(cid) bk.customerId=cid;
+      if(o.paid>0) bk.payments.push({amount:o.paid,type:"Nhập từ file",date:o.created,code:nextReceiptCode(),status:"approved"});
+      if(o.commission>0){
+        let ctv=customers.find(c=>c.kind==="ctv"&&c.name.toLowerCase()===o.ctvName.toLowerCase());
+        if(!ctv&&crmReady){ try{ const r=await apiBooking("POST",{name:o.ctvName,phone:"",kind:"ctv",note:""},"/api/customers"); ctv=r.customer; customers.push(ctv); }catch(e){ console.error(e); } }
+        bk.commission={ctvId:ctv?ctv.id:"",amount:o.commission,paid:!!o.commissionPaid};
+        if(o.commissionPaid) bk.commission.paidDate=o.created;
+      }
+      bookings.push(bk); updateCount();
+      if(await createRemote(bk)) ok++; else { bookings=bookings.filter(x=>x!==bk); updateCount(); fail++; }
+    }
+    refreshCrmUi();
+    const auto=autoComplete(); for(const b of auto) await saveBooking(b);
+    box.innerHTML=`<div class="card" style="margin:0;padding:10px 12px;font-size:13px">Đã nhập <b>${ok}</b> đơn${fail?`, <b style="color:#B85C5C">${fail}</b> đơn lỗi chưa nhập được. Chọn lại file để thử lại (đơn đã nhập có Mã tham chiếu sẽ tự bỏ qua).`:"."}</div>`;
+    $("imp-file").value=""; renderList(); toast("Nhập xong "+ok+" đơn",4000);
+  });
+}
+
 function csvCell(v){
   let t=v==null?"":String(v);
   if(/^[=+\-@\t\r]/.test(t)) t="'"+t; // chặn công thức độc hại khi mở bằng Excel
@@ -2221,9 +2294,9 @@ function onCustName(){
   if(c){ $("kh-cid").value=c.id; if(c.phone) $("kh-phone").value=c.phone; } else $("kh-cid").value="";
 }
 // Tìm khách theo mã đang chọn hoặc số điện thoại, chưa có thì tạo mới (lỗi thì bỏ qua, đơn vẫn tạo được)
-async function resolveCustomer(name,phone){
+async function resolveCustomer(name,phone,ignoreForm){
   if(!crmReady) return "";
-  const cid=$("kh-cid").value;
+  const cid=ignoreForm?"":$("kh-cid").value;
   if(cid&&customers.some(c=>c.id===cid)) return cid;
   const key=String(phone).replace(/\D/g,"");
   const found=key&&customers.find(c=>String(c.phone||"").replace(/\D/g,"")===key&&c.kind!=="ctv");

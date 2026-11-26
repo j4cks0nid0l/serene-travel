@@ -394,6 +394,172 @@
     }).sort(function (a, b) { return b.owed - a.owed; });
   }
 
+  // ---- Nhập nhiều đơn từ file CSV (mỗi dòng một dịch vụ, các dòng cùng "Nhóm đơn" gộp thành một đơn) ----
+  var IMPORT_HEAD = ['Nhóm đơn', 'Mã tham chiếu', 'Tên khách', 'SĐT', 'Ngày tạo đơn', 'Trạng thái đơn', 'Đã thu', 'Cộng tác viên', 'Hoa hồng', 'Hoa hồng đã trả',
+    'Loại dịch vụ', 'Đối tác', 'Tên dịch vụ', 'Ngày đi hoặc nhận phòng', 'Ngày về hoặc trả phòng', 'Chiều (Một chiều hoặc Khứ hồi)', 'Đơn vị',
+    'Số lượng', 'Giá bán', 'Giá net', 'SL người lớn', 'Giá bán người lớn', 'Net người lớn', 'SL trẻ em', 'Giá bán trẻ em', 'Net trẻ em', 'SL cao tuổi', 'Giá bán cao tuổi', 'Net cao tuổi', 'Ghi chú'];
+  var IMPORT_REQUIRED = ['Tên khách', 'SĐT', 'Loại dịch vụ', 'Đối tác', 'Tên dịch vụ'];
+  var IMPORT_MAX_ROWS = 1000;
+  function normTxt(s) { return String(s == null ? '' : s).trim().toLowerCase().replace(/\s+/g, ' '); }
+  // Đọc CSV: tự nhận dấu ngăn cột (phẩy, chấm phẩy, tab), có ngoặc kép, bỏ BOM
+  function parseCsv(text) {
+    var t = String(text == null ? '' : text).replace(/^\uFEFF/, '');
+    var first = t.split(/\r?\n/)[0] || '';
+    var sep = ',', best = (first.match(/,/g) || []).length, semi = (first.match(/;/g) || []).length, tab = (first.match(/\t/g) || []).length;
+    if (semi > best) { sep = ';'; best = semi; }
+    if (tab > best) { sep = '\t'; }
+    var rows = [], row = [], cell = '', q = false, i = 0, c;
+    for (; i < t.length; i++) {
+      c = t[i];
+      if (q) {
+        if (c === '"') { if (t[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += c;
+      } else if (c === '"') q = true;
+      else if (c === sep) { row.push(cell); cell = ''; }
+      else if (c === '\n' || c === '\r') {
+        if (c === '\r' && t[i + 1] === '\n') i++;
+        row.push(cell); cell = ''; rows.push(row); row = [];
+      } else cell += c;
+    }
+    if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
+    return rows.filter(function (r) { return r.some(function (x) { return String(x).trim() !== ''; }); });
+  }
+  function csvCellOut(v) { var s = String(v == null ? '' : v); return /[",;\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
+  function importTemplateRows(cats, partners) {
+    cats = cats && cats.length ? cats : DEFAULT_CATS;
+    var none = null, grp = null;
+    // Ưu tiên loại đã có đối tác để dòng ví dụ chạy thử được ngay
+    var hasP = function (c) { return partnersForCat(partners, c.id).length > 0; };
+    [true, false].forEach(function (needP) {
+      cats.forEach(function (c) {
+        if (needP && !hasP(c)) return;
+        if (!none && c.people === 'none') none = c;
+        if (!grp && c.people !== 'none') grp = c;
+      });
+    });
+    var pn = function (c) { var l = c ? partnersForCat(partners, c.id) : []; return l.length ? l[0].name : 'Tên đối tác'; };
+    var rows = [IMPORT_HEAD.slice()];
+    var blank = function () { return IMPORT_HEAD.map(function () { return ''; }); };
+    var set = function (r, k, v) { r[IMPORT_HEAD.indexOf(k)] = v; return r; };
+    if (none) {
+      var r1 = blank();
+      set(r1, 'Nhóm đơn', 'VD1'); set(r1, 'Mã tham chiếu', 'SHEET-001'); set(r1, 'Tên khách', 'VÍ DỤ Nguyễn Văn A'); set(r1, 'SĐT', '0901234567');
+      set(r1, 'Ngày tạo đơn', '25/11/2026'); set(r1, 'Trạng thái đơn', 'Thành công'); set(r1, 'Đã thu', '500000'); set(r1, 'Cộng tác viên', 'Tên CTV'); set(r1, 'Hoa hồng', '100000'); set(r1, 'Hoa hồng đã trả', 'Đã trả');
+      set(r1, 'Loại dịch vụ', none.name); set(r1, 'Đối tác', pn(none)); set(r1, 'Tên dịch vụ', 'Deluxe Sea View');
+      set(r1, 'Ngày đi hoặc nhận phòng', '251226'); set(r1, 'Ngày về hoặc trả phòng', '271226'); set(r1, 'Đơn vị', 'phòng');
+      set(r1, 'Số lượng', '1'); set(r1, 'Giá bán', '1200000'); set(r1, 'Giá net', '900000'); set(r1, 'Ghi chú', 'Ghi chú nếu có');
+      rows.push(r1);
+    }
+    if (grp) {
+      var r2 = blank();
+      set(r2, 'Nhóm đơn', 'VD1'); set(r2, 'Loại dịch vụ', grp.name); set(r2, 'Đối tác', pn(grp)); set(r2, 'Tên dịch vụ', 'Vé vui chơi ví dụ');
+      set(r2, 'Ngày đi hoặc nhận phòng', '261226'); set(r2, 'Đơn vị', 'vé');
+      set(r2, 'SL người lớn', '2'); set(r2, 'Giá bán người lớn', '880000'); set(r2, 'Net người lớn', '700000');
+      set(r2, 'SL trẻ em', '1'); set(r2, 'Giá bán trẻ em', '650000'); set(r2, 'Net trẻ em', '500000');
+      rows.push(r2);
+    }
+    return rows;
+  }
+  // Có dấu BOM để Excel hiểu tiếng Việt; xuống dòng kiểu Windows
+  function importTemplateCsv(cats, partners) {
+    return '\uFEFF' + importTemplateRows(cats, partners).map(function (r) { return r.map(csvCellOut).join(','); }).join('\r\n');
+  }
+  function moneyOf(s) { var d = String(s == null ? '' : s).replace(/\D/g, ''); return d ? parseInt(d, 10) : null; }
+  // dd/mm/yyyy, d/m/yy, dd-mm-yyyy, dd.mm.yyyy -> dd/mm/yyyy; null nếu sai
+  function normCreated(s) {
+    var m = /^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2}|\d{4})$/.exec(String(s == null ? '' : s).trim());
+    if (!m) return null;
+    var y = m[3].length === 2 ? 2000 + parseInt(m[3], 10) : parseInt(m[3], 10);
+    var d = new Date(y, parseInt(m[2], 10) - 1, parseInt(m[1], 10));
+    if (d.getFullYear() !== y || d.getMonth() !== parseInt(m[2], 10) - 1 || d.getDate() !== parseInt(m[1], 10)) return null;
+    return p2(d.getDate()) + '/' + p2(d.getMonth() + 1) + '/' + y;
+  }
+  // 251126, 25/11/26, 25/11/2026 -> 251126 (Excel hay làm mất số 0 đầu nên bù lại)
+  function normDate6(s) {
+    var raw = String(s == null ? '' : s).trim();
+    if (!raw) return '';
+    var m = /^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2}|\d{4})$/.exec(raw);
+    if (m) return p2(+m[1]) + p2(+m[2]) + m[3].slice(-2);
+    var d = raw.replace(/\D/g, '');
+    if (d.length === 5) d = '0' + d;
+    if (d.length === 8) d = d.slice(0, 4) + d.slice(6);
+    return d;
+  }
+  var STATUS_WORDS = { 'đang xử lý': 'processing', 'dang xu ly': 'processing', 'processing': 'processing', 'thành công': 'success', 'thanh cong': 'success', 'success': 'success', 'hủy': 'cancelled', 'huỷ': 'cancelled', 'đã hủy': 'cancelled', 'đã huỷ': 'cancelled', 'huy': 'cancelled', 'cancelled': 'cancelled' };
+  // rows: mảng các dòng đã đọc từ CSV (dòng đầu là tiêu đề). ctx: {cats, partners, today}
+  function buildImport(rows, ctx) {
+    var out = { orders: [], errors: [], skipped: 0, fatal: '' };
+    if (!rows || !rows.length) { out.fatal = 'File trống.'; return out; }
+    var idx = {};
+    rows[0].forEach(function (h, i) { var k = normTxt(h); if (k && idx[k] === undefined) idx[k] = i; });
+    var col = {};
+    IMPORT_HEAD.forEach(function (h) { col[h] = idx[normTxt(h)]; });
+    var miss = IMPORT_REQUIRED.filter(function (h) { return col[h] === undefined; });
+    if (miss.length) { out.fatal = 'File chưa đúng mẫu, thiếu cột: ' + miss.join(', ') + '. Hãy tải lại file mẫu.'; return out; }
+    if (rows.length - 1 > IMPORT_MAX_ROWS) { out.fatal = 'File có quá ' + IMPORT_MAX_ROWS + ' dòng. Chia nhỏ rồi nhập từng phần.'; return out; }
+    var cats = ctx.cats || DEFAULT_CATS, partners = ctx.partners || [];
+    var byGroup = {}, order = [], skipG = {};
+    var get = function (r, h) { var i = col[h]; return i === undefined ? '' : String(r[i] == null ? '' : r[i]).trim(); };
+    for (var li = 1; li < rows.length; li++) {
+      var r = rows[li], line = li + 1;
+      if (!r.some(function (x) { return String(x).trim() !== ''; })) continue;
+      var nm = get(r, 'Tên khách');
+      var g = get(r, 'Nhóm đơn') || ('#dòng' + line), o = byGroup[g], fresh = !o;
+      if (normTxt(nm).indexOf('ví dụ') === 0) { skipG[g] = 1; out.skipped++; continue; }
+      if (skipG[g] && !nm) { out.skipped++; continue; }
+      var err = function (m) { out.errors.push({ line: line, msg: m }); if (o) o.bad = true; };
+      if (fresh) {
+        o = byGroup[g] = { group: g, line: line, bad: false, svcs: [], lines: [] };
+        order.push(o);
+        var phone = get(r, 'SĐT');
+        if (!nm) err('Thiếu tên khách.');
+        else if (nm.length > 100 || /[<>]/.test(nm)) err('Tên khách không hợp lệ (tối đa 100 ký tự, không dùng < >).');
+        if (!phone || !validPhone(phone) || phone.length > 30) err('SĐT thiếu hoặc không hợp lệ.');
+        var created = get(r, 'Ngày tạo đơn') ? normCreated(get(r, 'Ngày tạo đơn')) : (ctx.today || '');
+        if (!created) err('Ngày tạo đơn chưa đúng (dạng dd/mm/yyyy).');
+        var stw = get(r, 'Trạng thái đơn'), st = stw ? STATUS_WORDS[normTxt(stw)] : 'success';
+        if (!st) err('Trạng thái đơn chỉ nhận: Đang xử lý, Thành công, Hủy.');
+        var ref = get(r, 'Mã tham chiếu');
+        if (ref.length > 40 || /[<>]/.test(ref)) err('Mã tham chiếu tối đa 40 ký tự, không dùng < >.');
+        var paid = moneyOf(get(r, 'Đã thu')) || 0, comm = moneyOf(get(r, 'Hoa hồng')) || 0, ctvName = get(r, 'Cộng tác viên');
+        if (ctvName.length > 100 || /[<>]/.test(ctvName)) err('Tên cộng tác viên không hợp lệ.');
+        if (comm > 0 && !ctvName) err('Có hoa hồng nhưng chưa ghi tên cộng tác viên.');
+        o.name = nm; o.phone = phone; o.created = created; o.orderStatus = st || 'success'; o.ref = ref; o.paid = paid;
+        o.ctvName = ctvName; o.commission = comm; o.commissionPaid = /^(đã trả|da tra|có|co|x|yes|1)$/.test(normTxt(get(r, 'Hoa hồng đã trả')));
+      }
+      o.lines.push(line);
+      var cname = get(r, 'Loại dịch vụ'), cat = null;
+      cats.forEach(function (c) { if (!cat && normTxt(c.name) === normTxt(cname)) cat = c; });
+      if (!cat) { err('Loại dịch vụ "' + cname + '" chưa có trong Cài đặt > Loại dịch vụ.'); continue; }
+      var pname = get(r, 'Đối tác'), pt = null;
+      partners.forEach(function (p) { if (!pt && normTxt(p.name) === normTxt(pname)) pt = p; });
+      if (!pt) { err('Đối tác "' + pname + '" chưa có trong Cài đặt > Đối tác.'); continue; }
+      var f = { catId: cat.id, catName: cat.name, partnerId: pt.id, partner: pt.name, note: get(r, 'Ghi chú'), dateMode: cat.dateMode, people: cat.people,
+        name: get(r, 'Tên dịch vụ'), dateIn: normDate6(get(r, 'Ngày đi hoặc nhận phòng')), dateOut: normDate6(get(r, 'Ngày về hoặc trả phòng')),
+        trip: /khứ|khu hoi|round/.test(normTxt(get(r, 'Chiều (Một chiều hoặc Khứ hồi)'))) ? 'round' : 'oneway', unit: get(r, 'Đơn vị') };
+      if (cat.people === 'none') {
+        f.qty = get(r, 'Số lượng'); f.price = moneyOf(get(r, 'Giá bán')); f.net = moneyOf(get(r, 'Giá net'));
+      } else {
+        f.lines = {};
+        [['al', 'người lớn'], ['tre', 'trẻ em'], ['nct', 'cao tuổi']].forEach(function (k) {
+          f.lines[k[0]] = { qty: get(r, 'SL ' + k[1]), price: get(r, 'Giá bán ' + k[1]) === '' ? '' : moneyOf(get(r, 'Giá bán ' + k[1])), net: moneyOf(get(r, 'Net ' + k[1])) };
+        });
+      }
+      var b = buildService(f);
+      if (!b.ok) { err(b.error); continue; }
+      o.svcs.push(b.svc);
+    }
+    order.forEach(function (o) {
+      if (!o.bad && !o.svcs.length) { out.errors.push({ line: o.line, msg: 'Đơn không có dịch vụ nào.' }); o.bad = true; }
+      if (!o.bad) {
+        o.totalAmt = o.svcs.reduce(function (a, s) { return a + (s.total || 0); }, 0);
+        if (o.paid > o.totalAmt) { out.errors.push({ line: o.line, msg: 'Đã thu (' + o.paid + ') lớn hơn tổng đơn (' + o.totalAmt + ').' }); o.bad = true; }
+      }
+      if (!o.bad) out.orders.push(o);
+    });
+    out.badOrders = order.filter(function (o) { return o.bad; }).length;
+    return out;
+  }
+
   // ---- Thống kê theo loại ----
   function statsByCat(bookings, cats) {
     var rows = {}, order = [];
@@ -447,6 +613,7 @@
     buildService: buildService, svcLines: svcLines, unitsOf: unitsOf, applyNet: applyNet, netState: netState,
     statsByCat: statsByCat, csvRows: csvRows,
     ORDER_STATUSES: ORDER_STATUSES, ORDER_STATUS_LABELS: ORDER_STATUS_LABELS, orderStatusOf: orderStatusOf, isApproved: isApproved, paidOf: paidOf, pendingOf: pendingOf,
+    IMPORT_HEAD: IMPORT_HEAD, parseCsv: parseCsv, importTemplateRows: importTemplateRows, importTemplateCsv: importTemplateCsv, buildImport: buildImport, normCreated: normCreated, normDate6: normDate6,
     NO_PARTNER: NO_PARTNER, cycleOf: cycleOf, parseVnDate: parseVnDate, periodOf: periodOf, supPaidOf: supPaidOf, supplierLedger: supplierLedger,
     commissionOf: commissionOf, commissionDue: commissionDue, bookingCustomerId: bookingCustomerId, customerLedger: customerLedger, commissionStats: commissionStats,
     NOTE_MAX: NOTE_MAX, cleanText: cleanText, validPhone: validPhone, validEmail: validEmail, validPartnerName: validPartnerName,
