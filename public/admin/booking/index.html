@@ -240,6 +240,7 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
 .menu-btn{border:.5px solid rgba(58,125,153,.25);margin-right:10px;flex:none}
 .sb-nav{display:flex;flex-direction:column;gap:2px;flex:1}
 .sb-item{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;font-family:inherit;font-size:13.5px;font-weight:500;color:#4A5F70;background:none;border:none;border-radius:9px;cursor:pointer;text-align:left}
+.nav-badge{margin-left:auto;background:#C8963C;color:#fff;border-radius:10px;font-size:11px;font-weight:600;min-width:18px;height:18px;line-height:18px;text-align:center;padding:0 5px}
 .sb-item:hover{background:#F0F7FA}
 .sb-item.active{background:#EBF5F9;color:#2A5F78;font-weight:600}
 .sb-caret{margin-left:auto;transition:transform .2s}
@@ -310,7 +311,7 @@ textarea{resize:vertical;min-height:68px;line-height:1.6}
   <nav class="sb-nav">
     <button class="sb-item active" data-tab="new" onclick="go('new')"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Tạo đơn</button>
     <button class="sb-item" data-tab="list" onclick="go('list')"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M5 6h.01M5 12h.01M5 18h.01"/></svg>Danh sách</button>
-    <button class="sb-item" data-tab="leads" onclick="go('leads')"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16l-6 8v6l-4-2v-4L4 5Z"/></svg>Lead</button>
+    <button class="sb-item" data-tab="leads" onclick="go('leads')"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16l-6 8v6l-4-2v-4L4 5Z"/></svg>Lead<span id="lead-badge" class="nav-badge" style="display:none"></span></button>
     <button class="sb-item" data-tab="customers" onclick="go('customers')"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0M16 11a3 3 0 1 0 0-6M17 14a5 5 0 0 1 4 6"/></svg>Khách hàng</button>
     <button class="sb-item" data-tab="debt" onclick="go('debt')"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 15h3"/></svg>Công nợ</button>
     <button class="sb-item" data-tab="stats" onclick="go('stats')"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="12" width="4" height="8" rx="1"/><rect x="10" y="8" width="4" height="12" rx="1"/><rect x="16" y="4" width="4" height="16" rx="1"/></svg>Thống kê</button>
@@ -2563,7 +2564,18 @@ async function loadCrm(){
   if(curTab==="leads") renderLeads();
   if(curTab==="debt") renderDebt();
 }
+function updateLeadBadge(){
+  const nb=$("lead-badge"); if(!nb) return;
+  const n=leads.filter(l=>l.status==="new").length;
+  nb.textContent=n>99?"99+":n; nb.style.display=n?"":"none";
+}
+// Mỗi 60 giây hỏi lại danh sách lead để lead mới từ website hiện lên mà không cần tải lại trang
+setInterval(async()=>{
+  if(document.hidden||!crmReady) return;
+  try{ const l=await apiBooking("GET",undefined,"/api/leads"); leads=l.leads||leads; updateLeadBadge(); if(curTab==="leads") renderLeads(); }catch(e){}
+},60000);
 function refreshCrmUi(){
+  updateLeadBadge();
   const dl=$("cust-list");
   if(dl) dl.innerHTML=customers.filter(c=>c.kind!=="ctv").map(c=>`<option value="${escAttr(c.name)}">${esc(c.phone||"")}</option>`).join("");
   const sel=$("kh-ctv");
@@ -2616,6 +2628,31 @@ function custDel(id){
     catch(e){ toast(e.message,4500); }
   });
 }
+function custEdit(id){
+  const c=customers.find(x=>x.id===id); if(!c) return;
+  const inp='width:100%;padding:9px 10px;border:.5px solid rgba(58,125,153,.3);border-radius:8px;font-size:14px;font-family:inherit;margin-top:3px;box-sizing:border-box';
+  openModal(`<b>Sửa thông tin</b>
+    <div style="text-align:left;margin-top:10px;font-size:12px;color:#5A7080">Tên<input id="ce-name" style="${inp}" value="${escAttr(c.name)}"></div>
+    <div style="text-align:left;margin-top:8px;font-size:12px;color:#5A7080">Số điện thoại<input id="ce-phone" inputmode="tel" style="${inp}" value="${escAttr(c.phone||"")}"></div>
+    <div style="text-align:left;margin-top:8px;font-size:12px;color:#5A7080">Loại<select id="ce-kind" style="${inp}"><option value="retail"${c.kind!=="ctv"?" selected":""}>Khách lẻ</option><option value="ctv"${c.kind==="ctv"?" selected":""}>CTV</option></select></div>
+    <div style="text-align:left;margin-top:8px;font-size:12px;color:#5A7080">Ghi chú<input id="ce-note" style="${inp}" value="${escAttr(c.note||"")}"></div>`,
+    [{label:"Hủy"},{label:"Lưu",main:true,fn:()=>custEditSave(id)}]);
+}
+async function custEditSave(id){
+  const c=customers.find(x=>x.id===id); if(!c) return;
+  const name=$("ce-name").value.trim(), phone=$("ce-phone").value.trim(), kind=$("ce-kind").value, note=$("ce-note").value.trim();
+  if(!name){ toast("Nhập tên!"); return; }
+  if(c.kind==="ctv"&&kind!=="ctv"&&bookings.some(b=>b.commission&&b.commission.ctvId===id)){ toast("CTV này đã có hoa hồng ở đơn, chưa đổi sang khách lẻ được.",4500); return; }
+  // Đơn cũ chỉ nối với khách qua số điện thoại: gắn cứng mã khách trước khi đổi số để không mất liên kết
+  const oldPhone=c.phone||"";
+  const relink=(phone!==oldPhone)?bookings.filter(b=>!b.customerId&&BK.bookingCustomerId(b,customers)===id):[];
+  try{
+    const r=await apiBooking("PUT",{name,phone,kind,note},"/api/customers/"+id);
+    Object.assign(c,r.customer||{name,phone,kind,note});
+    for(const b of relink){ b.customerId=id; await saveBooking(b); }
+    refreshCrmUi(); renderCustomers(); toast("Đã lưu "+name);
+  }catch(e){ toast(e.message,4500); }
+}
 function custOrder(id){
   const c=customers.find(x=>x.id===id); if(!c) return;
   cancelEdit(); $("kh-name").value=c.name; $("kh-phone").value=c.phone||""; $("kh-cid").value=c.id;
@@ -2634,7 +2671,7 @@ function renderCustomers(){
   if(!led.length){ w.innerHTML='<div class="empty"><i class="ti ti-users"></i>Chưa có khách nào</div>'; return; }
   w.innerHTML=led.map(r=>`<div class="crm-row"><div style="min-width:0"><div style="font-size:14px;font-weight:500">${esc(r.name)}<span class="kind-tag${r.kind==="ctv"?" ctv":""}">${r.kind==="ctv"?"CTV":"Khách lẻ"}</span></div>
     <div style="font-size:12px;color:#7A8FA0">${esc(r.phone||"Chưa có SĐT")}${r.note?" · "+esc(r.note):""}</div>
-    <div class="crm-acts">${r.kind!=="ctv"?`<button class="mini-btn" onclick="custOrder('${r.id}')">Tạo đơn</button>`:""}<button class="mini-btn" onclick="custOrders('${r.id}')">Xem đơn</button><button class="mini-btn danger" onclick="custDel('${r.id}')">Xóa</button></div></div>
+    <div class="crm-acts">${r.kind!=="ctv"?`<button class="mini-btn" onclick="custOrder('${r.id}')">Tạo đơn</button>`:""}<button class="mini-btn" onclick="custOrders('${r.id}')">Xem đơn</button><button class="mini-btn" onclick="custEdit('${r.id}')">Sửa</button><button class="mini-btn danger" onclick="custDel('${r.id}')">Xóa</button></div></div>
     <div style="text-align:right;font-size:12px;white-space:nowrap">${r.kind!=="ctv"?`<div>${r.count} đơn</div><div style="font-weight:600">${VNDn(r.revenue)} đ</div>${r.debt>0?`<div style="color:#C8963C">Nợ ${VNDn(r.debt)} đ</div>`:""}`:`<div>${(BK.commissionStats(bookings,customers).rows.find(x=>x.id===r.id)||{count:0}).count} đơn</div>`}</div></div>`).join("");
 }
 function renderDebt(){
@@ -2709,7 +2746,7 @@ function leadToOrder(id){
   leadFromId=id; const bn=$("lead-banner"); bn.style.display="block"; bn.textContent="Tạo đơn từ lead: "+ld.name+(ld.need?" - "+ld.need:"");
   switchTab("new"); window.scrollTo({top:0,behavior:"smooth"});
 }
-function renderLeads(){
+function renderLeads(){ updateLeadBadge();
   const w=$("lead-wrap"); if(!w) return;
   if(!crmReady){ w.innerHTML='<div class="empty"><i class="ti ti-plug-off"></i>Chưa tải được lead. Kiểm tra bảng leads trong D1.</div>'; return; }
   const list=[...leads].reverse();
