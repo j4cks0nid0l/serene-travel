@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Cộng tác viên | Serene Travel</title>
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-title" content="Serene CTV">
+<meta name="theme-color" content="#2D6E7E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Playfair+Display:wght@500;600&display=swap">
+<link rel="stylesheet" href="/sales/sales.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/sales/"><img src="/icons/icon-192.png" alt="" width="36" height="36"><span>Serene Travel</span></a>
+  <span class="tag">Cộng tác viên</span>
+  <button class="link-btn" id="btn-logout" type="button" hidden>Đăng xuất</button>
+</header>
+
+<main>
+  <!-- Đăng nhập -->
+  <section class="card" id="v-login" hidden>
+    <h1>Đăng nhập</h1>
+    <p class="lead">Dành cho cộng tác viên của Serene Travel. Đăng nhập để xem bảng giá.</p>
+    <form id="f-login" novalidate>
+      <label for="l-email">Email</label>
+      <input id="l-email" type="email" autocomplete="username" maxlength="80" required>
+      <label for="l-pass">Mật khẩu</label>
+      <input id="l-pass" type="password" autocomplete="current-password" maxlength="128" required>
+      <p class="msg" id="m-login" role="alert"></p>
+      <button class="primary" type="submit">Đăng nhập</button>
+    </form>
+    <p class="alt">Chưa có tài khoản? <button class="link-btn" type="button" data-go="register">Đăng ký làm cộng tác viên</button></p>
+  </section>
+
+  <!-- Đăng ký -->
+  <section class="card" id="v-register" hidden>
+    <h1>Đăng ký cộng tác viên</h1>
+    <p class="lead">Điền thông tin bên dưới. Serene sẽ kiểm tra và duyệt tài khoản của bạn.</p>
+    <form id="f-register" novalidate>
+      <label for="r-name">Họ và tên</label>
+      <input id="r-name" autocomplete="name" maxlength="60" required>
+      <label for="r-phone">Số điện thoại</label>
+      <input id="r-phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="15" required>
+      <label for="r-zalo">Zalo <span class="opt">(nếu khác số điện thoại)</span></label>
+      <input id="r-zalo" maxlength="30">
+      <label for="r-email">Email</label>
+      <input id="r-email" type="email" autocomplete="email" maxlength="80" required>
+      <label for="r-pass">Mật khẩu <span class="opt">(từ 8 ký tự)</span></label>
+      <input id="r-pass" type="password" autocomplete="new-password" maxlength="128" required>
+      <input class="hp" id="r-web" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+      <p class="msg" id="m-register" role="alert"></p>
+      <button class="primary" type="submit">Đăng ký</button>
+    </form>
+    <p class="alt">Đã có tài khoản? <button class="link-btn" type="button" data-go="login">Đăng nhập</button></p>
+  </section>
+
+  <!-- Nhập mã OTP -->
+  <section class="card" id="v-verify" hidden>
+    <h1>Xác nhận email</h1>
+    <p class="lead">Chúng tôi đã gửi mã gồm 6 số tới <b id="vf-email"></b>. Mã có hiệu lực trong 10 phút.</p>
+    <form id="f-verify" novalidate>
+      <label for="vf-code">Mã xác nhận</label>
+      <input id="vf-code" class="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]*" required>
+      <p class="msg" id="m-verify" role="alert"></p>
+      <button class="primary" type="submit">Xác nhận</button>
+    </form>
+    <p class="alt">Chưa nhận được mã? <button class="link-btn" type="button" id="btn-resend">Gửi lại mã</button></p>
+  </section>
+
+  <!-- Chờ duyệt -->
+  <section class="card center" id="v-wait" hidden>
+    <div class="ok-mark" aria-hidden="true">✓</div>
+    <h1>Đã nhận đăng ký</h1>
+    <p class="lead">Serene sẽ duyệt tài khoản của bạn trong thời gian sớm nhất và báo qua số điện thoại hoặc Zalo bạn đã điền. Sau khi được duyệt, bạn đăng nhập để xem bảng giá.</p>
+    <button class="primary" type="button" data-go="login">Về trang đăng nhập</button>
+  </section>
+
+  <!-- Đã đăng nhập -->
+  <section id="v-home" hidden>
+    <div class="card">
+      <h1>Xin chào, <span id="h-name"></span></h1>
+      <p class="lead">Bảng giá dành cho cộng tác viên đang được chuẩn bị và sẽ có ở đây trong bản cập nhật tới.</p>
+    </div>
+    <div class="card">
+      <h2>Đổi mật khẩu</h2>
+      <form id="f-pass" novalidate>
+        <label for="p-cur">Mật khẩu hiện tại</label>
+        <input id="p-cur" type="password" autocomplete="current-password" maxlength="128">
+        <label for="p-new">Mật khẩu mới <span class="opt">(từ 8 ký tự)</span></label>
+        <input id="p-new" type="password" autocomplete="new-password" maxlength="128">
+        <p class="msg" id="m-pass" role="alert"></p>
+        <button type="submit">Đổi mật khẩu</button>
+      </form>
+    </div>
+  </section>
+</main>
+<script src="/sales/sales.js"></script>
+</body>
+</html>
