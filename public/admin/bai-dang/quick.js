@@ -27,7 +27,13 @@ async function toBlob(src,type,quality,maxSide){
  x.drawImage(img,0,0,w,h);
  return new Promise((ok,no)=>c.toBlob(b=>b?ok(b):no(Error('Không xử lý được ảnh.')),type,quality))}
 function readDataUrl(file){return new Promise((ok,no)=>{const r=new FileReader();r.onload=()=>ok(r.result);r.onerror=()=>no(Error('Không đọc được tệp.'));r.readAsDataURL(file)})}
-async function fileToJpeg(file){return toBlob(await readDataUrl(file),'image/jpeg',.86,1600)}
+// Giữ nguyên ảnh gốc (kích thước và chất lượng). Chỉ đổi sang JPEG khi định dạng lạ (như HEIC) hoặc quá 20 MB.
+const MAX_BYTES=20*1024*1024;
+async function prepareFile(file){
+ if(/^image\/(jpeg|png|webp)$/.test(file.type)&&file.size<=MAX_BYTES)return file;
+ const jpg=await toBlob(await readDataUrl(file),'image/jpeg',.95,0);
+ if(jpg.size>MAX_BYTES)throw Error('Ảnh quá lớn (trên 20 MB), hãy giảm dung lượng trước khi tải.');
+ return jpg}
 function fileName(ph){return (ph.album+(ph.label?' '+ph.label:'')).replace(/[^\p{L}\p{N}]+/gu,'-').replace(/^-|-$/g,'').slice(0,60)||'anh'}
 async function download(ph){
  const r=await fetch(ph.url);if(!r.ok)throw Error('Không tải được ảnh.');
@@ -99,7 +105,7 @@ function drawPhotos(){
  const list=data.photos.filter(p=>(!st.phAlbum||p.album===st.phAlbum)&&(!q||(p.album+' '+p.label).toLowerCase().includes(q)));
  box.innerHTML='<details class="q-add"'+(ed||!data.photos.length?' open':'')+'><summary>'+(ed?'Đang sửa ảnh':'+ Thêm ảnh')+'</summary>'+(ed?`<div class="q-form"><h2>Sửa ảnh</h2><div class="row2"><div><label for="p-album">Khách sạn / resort</label><input id="p-album" list="p-albums" maxlength="80" value="${esc(ed.album)}"></div><div><label for="p-label">Nhãn (không bắt buộc)</label><input id="p-label" maxlength="40" value="${esc(ed.label)}"></div></div><datalist id="p-albums">${albums.map(a=>`<option value="${esc(a[0])}">`).join('')}</datalist><div class="actions"><button class="primary" id="p-save" type="button">Lưu</button><button id="p-cancel" type="button">Hủy</button></div></div>`
  :`<div class="q-form"><h2>Thêm ảnh</h2><div class="row2"><div><label for="p-album">Khách sạn / resort</label><input id="p-album" list="p-albums" maxlength="80" placeholder="VD: Vinpearl Nha Trang" value="${esc(st.phAlbum)}"></div><div><label for="p-label">Nhãn (không bắt buộc)</label><input id="p-label" maxlength="40" placeholder="VD: Hồ bơi, Phòng, Bữa sáng"></div></div><datalist id="p-albums">${albums.map(a=>`<option value="${esc(a[0])}">`).join('')}</datalist>
-  <div><label for="p-files">Chọn ảnh (được chọn nhiều ảnh cùng lúc)</label><input id="p-files" type="file" accept="image/*" multiple></div><p class="hint" style="margin:0;font-size:12.5px;color:var(--muted)">Ảnh được thu nhỏ còn tối đa 1600 điểm ảnh để gửi khách nhanh hơn.</p><div class="actions"><button class="primary" id="p-up" type="button">Tải ảnh lên</button></div></div>`)+'</details>'
+  <div><label for="p-files">Chọn ảnh (được chọn nhiều ảnh cùng lúc)</label><input id="p-files" type="file" accept="image/*" multiple></div><p class="hint" style="margin:0;font-size:12.5px;color:var(--muted)">Ảnh được giữ nguyên kích thước và chất lượng gốc (tối đa 20 MB mỗi ảnh).</p><div class="actions"><button class="primary" id="p-up" type="button">Tải ảnh lên</button></div></div>`)+'</details>'
  +`<div class="q-top"><input type="search" id="p-q" placeholder="Tìm theo tên khách sạn hoặc nhãn" value="${esc(st.phQ)}"><button id="p-mode" type="button">${st.pickMode?'Thoát chọn nhiều':'Chọn nhiều ảnh'}</button>${st.pickMode?`<button class="primary" id="p-dlsel" type="button"${st.pick.size?'':' disabled'}>Tải về ${st.pick.size} ảnh</button>`:''}</div>
   <div class="q-chips"><button type="button" class="q-chip${!st.phAlbum?' on':''}" data-al="">Tất cả<span class="n">${data.photos.length}</span></button>${albums.map(a=>`<button type="button" class="q-chip${st.phAlbum===a[0]?' on':''}" data-al="${esc(a[0])}">${esc(a[0])}<span class="n">${a[1]}</span></button>`).join('')}</div>
   <div class="q-photos">${list.length?list.map(p=>`<div class="q-ph${st.pick.has(p.id)?' sel':''}" data-id="${esc(p.id)}"><img src="${esc(p.url)}" alt="${esc(p.album+' '+p.label)}" loading="lazy"><div class="cap" title="${esc(p.album)}">${esc(p.label||'')}${p.label&&!st.phAlbum?' · ':''}${st.phAlbum?'':esc(p.album)}</div>${st.pickMode?'':'<div class="bar"><button class="primary" data-a="copy" type="button">Copy</button><button data-a="dl" type="button">Tải</button><button data-a="edit" type="button">Sửa</button><button class="danger" data-a="del" type="button">Xóa</button></div>'}</div>`).join(''):`<div class="empty" style="grid-column:1/-1">${data.photos.length?'Không có ảnh phù hợp.':'Chưa có ảnh nào. Thêm ảnh đầu tiên ở khung phía trên.'}</div>`}</div>`;
@@ -134,8 +140,8 @@ async function uploadPhotos(){
  for(let i=0;i<files.length;i++){
   toast('Đang tải ảnh '+(i+1)+'/'+files.length+'...',60000);
   try{
-   const jpg=await fileToJpeg(files[i]);
-   const up=await api('upload','POST',jpg);
+   const blob=await prepareFile(files[i]);
+   const up=await api('upload?big=1','POST',blob);
    const r=await api('quick/photo','POST',{album,label,url:up.url});
    data.photos.unshift(r.photo);ok++}
   catch(e){fail++;lastErr=e.message}}

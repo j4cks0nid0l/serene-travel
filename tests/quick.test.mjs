@@ -45,3 +45,9 @@ test('Copy nhanh: chỉ Chủ dùng được',async()=>{
  assert.equal((await s.j('/api/quick')).status,403);
  assert.equal((await client(env).j('/api/quick')).status,401);
 });
+test('Copy nhanh: ảnh lớn (đến 20 MB) chỉ qua đường tải riêng của Chủ',async()=>{
+ const env=await runtime({passwordHash:hash});const o=client(env);await o.login('serenetravelvn@gmail.com',pass);
+ const big=new Uint8Array(6*1024*1024);big.set([137,80,78,71,13,10,26,10]);
+ assert.equal((await o.j('/api/upload','POST',big,'image/png')).status,413);
+ assert.equal((await o.j('/api/upload?big=1','POST',big,'image/png')).status,200);
+});
