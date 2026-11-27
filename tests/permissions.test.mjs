@@ -1,7 +1,8 @@
 import test from 'node:test';
+import {runMigration} from './helpers/migrate.mjs';
 import assert from 'node:assert/strict';
 import {pbkdf2Sync} from 'node:crypto';
-import worker from '../public/_worker.js';
+import worker from '../public/_worker.js/index.js';
 import {runtime} from '../scripts/local-runtime.mjs';
 const pass='Only-for-local-tests-Change-This-123!';
 const hash='test-salt:'+pbkdf2Sync(pass,'test-salt',100000,32,'sha256').toString('hex');
@@ -212,9 +213,12 @@ test('Nhật ký thao tác và đổi mật khẩu',async()=>{
  assert.equal((await client(env).login('a@example.com','matkhau-moi-2')).status,200);
  assert.equal((await owner.j('me/password','POST',{current:'x',next:'matkhau-moi-2'})).status,400,'Chủ đổi mật khẩu ở Cloudflare');
 });
-test('Kho cũ chưa có cột owner vẫn chạy (tự nâng cấp)',async()=>{
+test('Kho cũ: chạy schema và migration là đủ cột owner và bảng staff',async()=>{
  const env=await runtime({passwordHash:hash});
  for(const sql of ['DROP TABLE customers','DROP TABLE leads',"CREATE TABLE customers (id TEXT PRIMARY KEY, name TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '', kind TEXT NOT NULL DEFAULT 'retail', note TEXT NOT NULL DEFAULT '', created TEXT NOT NULL, updated TEXT NOT NULL)","CREATE TABLE leads (id TEXT PRIMARY KEY, name TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '', need TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'new', booking_id TEXT NOT NULL DEFAULT '', created TEXT NOT NULL, updated TEXT NOT NULL)",'DROP TABLE staff','DROP TABLE staff_sessions','DROP TABLE audit_log'])await env.BOOKINGS.prepare(sql).run();
+ // Quy trình khi triển khai: chạy lại schema (tạo bảng còn thiếu) rồi file migration (thêm cột owner).
+ await runMigration(env.BOOKINGS,'schema-bookings.sql');
+ await runMigration(env.BOOKINGS,'migrations/2026-11-legacy-bookings-owner.sql');
  const owner=client(env);await owner.login(OWNER,pass);
  assert.equal((await owner.j('customers','POST',{name:'Cũ',phone:'1',kind:'retail',note:''})).status,201);
  assert.equal((await owner.j('staff','POST',{name:'N',email:'n@example.com',password:'matkhau-tam-1'})).status,201);

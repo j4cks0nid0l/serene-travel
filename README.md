@@ -1,7 +1,7 @@
-# Serene Travel V2.4
+# Serene Travel
 
-Bản phát triển có website công khai và trang quản trị riêng tại `/admin/`.
-Giữ nguyên các file V2.3 trở về trước. File `../serene-travel-v2.4.html` dùng để duyệt giao diện, không cung cấp đăng nhập hoặc lưu dữ liệu máy chủ khi mở trực tiếp.
+Website công khai và trang quản trị tại `/admin/`.
+File mở trực tiếp bằng trình duyệt (file://) chỉ để xem giao diện: không đăng nhập được và không lưu dữ liệu.
 
 ## Đã thực hiện
 
@@ -28,12 +28,13 @@ Giữ nguyên các file V2.3 trở về trước. File `../serene-travel-v2.4.ht
 ## Đưa lên GitHub và Cloudflare
 
 1. Đưa **nội dung thư mục này** lên một repository GitHub, nên dùng repository riêng tư. Giữ `.gitignore`; không đưa `.dev.vars`, `node_modules`, `.wrangler` hay mật khẩu lên Git.
-2. Tạo Cloudflare D1 database, ví dụ `serene-content`; chạy `schema.sql`, rồi `seed.sql` trên database đó. `seed.sql` chỉ thêm nội dung gốc chưa tồn tại và không ghi đè nội dung bạn đã sửa.
+2. Tạo D1 database `serene-content` (binding **DB**). Trong tab Console, chạy lần lượt `schema.sql`, `schema-posts.sql`, rồi `seed.sql`.
+   Tạo D1 database `serene-bookings` (binding **BOOKINGS**) và chạy `schema-bookings.sql`. Đây là toàn bộ bảng cần có; file trong `migrations/` chỉ dùng khi nâng cấp database tạo từ bản cũ.
 3. Tạo R2 bucket, ví dụ `serene-images`.
 4. Tạo Cloudflare Pages project từ repository GitHub. Build command để trống, output directory là **public**. Nếu repository chứa cả thư mục cha, đặt root directory là `serene-travel-v2.4`.
-5. Trong Pages Settings → Bindings, gắn D1 vào tên **DB**, R2 vào tên **MEDIA**. Tên viết hoa phải đúng.
-6. Trên máy, chạy `node scripts/credentials.mjs`. Công cụ tạo mật khẩu ngẫu nhiên và hash. Lưu mật khẩu vào trình quản lý mật khẩu. Không gửi mật khẩu vào chat.
-7. Đặt giá trị hash vừa tạo vào **Secret** có tên `ADMIN_PASSWORD_HASH` trong Cloudflare Pages, tuyệt đối không đặt trong build command hay public file. Chỉ email đã nêu được đăng nhập. Chạy lại công cụ sẽ tạo mật khẩu/hash khác.
+5. Trong Pages Settings → Bindings, gắn D1 `serene-content` vào tên **DB**, D1 `serene-bookings` vào tên **BOOKINGS**, R2 vào tên **MEDIA**. Tên viết hoa phải đúng.
+6. Trên máy, đặt email của Chủ rồi chạy công cụ tạo mật khẩu. PowerShell: `$env:ADMIN_EMAIL = "email-cua-chu@..."; node scripts/credentials.mjs`. Công cụ tạo mật khẩu ngẫu nhiên và hash. Lưu mật khẩu vào trình quản lý mật khẩu. Không gửi mật khẩu vào chat.
+7. Trong Cloudflare Pages → Settings → Variables and Secrets: thêm **Secret** `ADMIN_PASSWORD_HASH` với giá trị hash vừa tạo, và **Variable** `ADMIN_EMAIL` với đúng email đã dùng ở bước 6. Không đặt hash hay email trong build command hay file public. Chạy lại công cụ sẽ tạo mật khẩu/hash khác.
 8. Redeploy để bindings và secret có hiệu lực. Dùng địa chỉ `https://<project>.pages.dev`, chưa cần mua tên miền.
 9. Mở `/admin/`, đăng nhập; thử lưu nháp rồi xem bằng cửa sổ ẩn danh để xác nhận bản nháp không hiện. Đăng một nội dung kiểm tra, xác nhận website cập nhật, rồi gỡ bài thử đó.
 10. Thử tải ảnh và đăng xuất. Trước khi dùng thật, kiểm tra lại toàn bộ luồng trên Cloudflare; bản này chưa được triển khai vào tài khoản của bạn.
@@ -45,11 +46,12 @@ Cloudflare cấu hình qua dashboard là đủ. `wrangler.example.toml` là phư
 Yêu cầu Node.js 24 trở lên cho máy chủ kiểm tra SQLite. Cài thư viện bằng `pnpm install` (có lockfile).
 
 ```sh
-node --test tests/*.test.mjs
-node scripts/credentials.mjs
+npm run check   # kiểm tra cú pháp mọi file JavaScript
+npm test        # test máy chủ và kiểm tra tĩnh giao diện
+npm run credentials
 ```
 
-Để dùng máy chủ kiểm tra trên máy, tạo file `.dev.vars` (đã được bỏ qua bởi Git) chứa `ADMIN_PASSWORD_HASH=<salt:hash>` từ công cụ credentials, rồi:
+Để dùng máy chủ kiểm tra trên máy, tạo file `.dev.vars` (đã được bỏ qua bởi Git) chứa `ADMIN_PASSWORD_HASH=<salt:hash>` và `ADMIN_EMAIL=<email Chủ>`, rồi:
 
 ```sh
 node scripts/preview-server.mjs
@@ -80,12 +82,6 @@ Tài liệu nền tảng:
 - https://developers.cloudflare.com/pages/functions/advanced-mode/
 - https://developers.cloudflare.com/pages/functions/bindings/
 - https://developers.cloudflare.com/pages/configuration/git-integration/
-
-
-## V2.4.1: giao diện đăng nhập
-
-Làm mới màn hình đăng nhập, bổ sung hiện/ẩn mật khẩu và sửa đường dẫn CSS/JS tương đối. File `../serene-travel-admin-preview.html` là bản duyệt độc lập, không cần mật khẩu, không gửi nội dung lên mạng. Mã mô phỏng chỉ nằm trong file xem thử ngoài thư mục public; trang quản trị triển khai vẫn yêu cầu đăng nhập qua API.
-Phiên bản website: V2.5
 
 ## Quản lý booking (/admin/booking)
 
@@ -126,3 +122,29 @@ Mỗi phút, Cloudflare Worker `workers/clock` gọi `POST /api/machine/tick` (k
 - Bài chờ duyệt hoặc lỗi: ô nội dung khóa sẵn, bấm "Sửa bài" để sửa, rồi "Lưu sửa" hoặc "Hủy sửa".
 - Bài đã hẹn giờ là bài đã duyệt nên không sửa nội dung. Chỉ có nút "Đổi giờ" (giờ mới cách hiện tại ít nhất 5 phút, không đổi được khi bài sắp đến giờ đăng).
 - Khi lưu hoặc hẹn giờ một bài Claude viết mà nội dung đã bị sửa, trang hiện "Báo cáo sửa bài" (bản gốc và bản đã sửa) kèm nút sao chép để dán cho Claude học cách hành văn.
+
+## Cấu trúc mã nguồn
+
+- `public/`: website công khai (`index.html`, `home.js`, `site.js`), trang quản trị (`admin/`), trang sales (`sales/`), ảnh và dữ liệu mặc định.
+- `public/_worker.js/`: mã máy chủ theo chế độ Pages "_worker.js directory". `index.js` là điểm vào; các module theo chức năng: `core.js`, `content.js`, `auth.js`, `booking.js`, `crm.js`, `posts.js`, `quick.js`, `ctv.js`, `media.js`.
+- `schema*.sql`, `seed.sql`: cấu trúc và nội dung ban đầu. `migrations/`: chỉ cho database đã tạo từ bản cũ.
+- `tests/`: test máy chủ (`*.test.mjs`) và kiểm tra tĩnh giao diện (`static-site.test.mjs`).
+- `workers/clock/`: worker đồng hồ gửi bài đến giờ (xem bên dưới).
+
+**Lưu ý khi triển khai:** kiểm tra một bản preview trên Cloudflare Pages trước khi đưa lên production, để xác nhận thư mục `_worker.js/` được bundle đúng.
+
+## Giới hạn truy cập
+
+- Đăng nhập quản trị: tối đa 10 lần thử sai mỗi IP trong 15 phút; tối đa 300 lần mỗi 15 phút trên toàn hệ thống (ngưỡng này chỉ để chặn tấn công diện rộng, không khóa Chủ).
+- Form khách trên website: tối đa 10 lần mỗi IP mỗi giờ; tối đa 1000 lần mỗi giờ trên toàn hệ thống.
+- Giới hạn toàn cục có thể bị tấn công lấp đầy. Bước tiếp theo nên là Cloudflare Turnstile, cần tài khoản Cloudflare để cấu hình.
+
+## Worker đồng hồ (`workers/clock`)
+
+Worker này gọi `/api/machine/tick` mỗi phút để gửi bài đến giờ sang Make. Triển khai riêng:
+
+1. Tạo khóa ngẫu nhiên dài (ví dụ 40 ký tự base64url), đặt làm Secret `TICK_KEY` trên worker. Trong D1 `serene-content`, thêm dòng vào `machine_tokens` với `scope` = `clock` và `hash` = SHA-256 hex của khóa (khóa thô không lưu trong database).
+2. Đặt Variable `TICK_URL` = `https://<website>/api/machine/tick`.
+3. Trong thư mục `workers/clock`, chạy `npx wrangler deploy`. Cron được khai báo trong `wrangler.toml` (mỗi phút).
+
+Nếu không cần đăng bài tự động từ Make, có thể không triển khai worker này.

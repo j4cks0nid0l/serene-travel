@@ -1,0 +1,9 @@
+# Worker đồng hồ: mỗi phút gọi /api/machine/tick trên website để gửi bài tới giờ sang Make.
+# Triển khai: npx wrangler deploy (chạy trong thư mục workers/clock).
+# Trước khi deploy, tạo biến TICK_URL (địa chỉ https://<website>/api/machine/tick) và secret TICK_KEY (khóa Bearer của máy).
+name = "serene-clock"
+main = "index.js"
+compatibility_date = "2026-10-01"
+
+[triggers]
+crons = ["* * * * *"]

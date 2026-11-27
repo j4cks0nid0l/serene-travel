@@ -15,3 +15,7 @@ database_id = "00000000-0000-0000-0000-000000000000" # Replace before deploying.
 [[r2_buckets]]
 binding = "MEDIA"
 bucket_name = "serene-images"
+
+[vars]
+# Email đăng nhập của Chủ (bắt buộc). Để trống thì không ai đăng nhập được với tư cách Chủ.
+ADMIN_EMAIL = "email-cua-chu@example.com"

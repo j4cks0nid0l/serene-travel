@@ -1,7 +1,8 @@
 import test from 'node:test';
+import {runMigration} from './helpers/migrate.mjs';
 import assert from 'node:assert/strict';
 import {pbkdf2Sync} from 'node:crypto';
-import worker from '../public/_worker.js';
+import worker from '../public/_worker.js/index.js';
 import {runtime} from '../scripts/local-runtime.mjs';
 const pass='Only-for-local-tests-Change-This-123!';
 const hash='test-salt:'+pbkdf2Sync(pass,'test-salt',100000,32,'sha256').toString('hex');
@@ -71,8 +72,10 @@ test('Copy nhanh: 3 tầng Mục > Nhóm > Tin, đổi tên và xóa cả mục/
 });
 test('Copy nhanh: bảng cũ chỉ có nhóm thì chuyển nhóm cũ thành Mục',async()=>{
  const env=await runtime({passwordHash:hash});
+ await env.DB.prepare('DROP TABLE quick_msgs').run();
  await env.DB.prepare("CREATE TABLE quick_msgs (id TEXT PRIMARY KEY, grp TEXT NOT NULL DEFAULT '', title TEXT NOT NULL, body TEXT NOT NULL, created TEXT NOT NULL, updated TEXT NOT NULL)").run();
  await env.DB.prepare("INSERT INTO quick_msgs VALUES ('Qold000001','Báo giá','Mẫu cũ','nd','t','t')").run();
+ await runMigration(env.DB,'migrations/2026-11-legacy-quick-columns.sql');
  const o=client(env);await o.login('serenetravelvn@gmail.com',pass);
  const m=(await o.j('/api/quick')).body.msgs;assert.equal(m[0].sec,'Báo giá');assert.equal(m[0].grp,'');
  const again=(await o.j('/api/quick')).body.msgs;assert.equal(again[0].sec,'Báo giá');
@@ -95,8 +98,10 @@ test('Copy nhanh: ảnh 3 tầng Mục > Nhóm > Khách sạn, đổi tên, xóa
 });
 test('Copy nhanh: ảnh cũ chưa có mục vẫn đọc được, nằm ở mục trống',async()=>{
  const env=await runtime({passwordHash:hash});
+ await env.DB.prepare('DROP TABLE quick_photos').run();
  await env.DB.prepare("CREATE TABLE quick_photos (id TEXT PRIMARY KEY, album TEXT NOT NULL, label TEXT NOT NULL DEFAULT '', url TEXT NOT NULL, created TEXT NOT NULL)").run();
  await env.DB.prepare("INSERT INTO quick_photos VALUES ('Qphoto00001','Vinpearl','Hồ bơi','/media/a.png','t')").run();
+ await runMigration(env.DB,'migrations/2026-11-legacy-quick-columns.sql');
  const o=client(env);await o.login('serenetravelvn@gmail.com',pass);
  const p=(await o.j('/api/quick')).body.photos[0];assert.equal(p.album,'Vinpearl');assert.equal(p.sec,'');assert.equal(p.grp,'');
  assert.equal((await o.j('/api/quick/photo/Qphoto00001','PUT',{sec:'Vinpearl 2N1Đ',grp:'',album:'Vinpearl',label:'Hồ bơi'})).status,200);

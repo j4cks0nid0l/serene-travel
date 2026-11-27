@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import {pbkdf2Sync} from 'node:crypto';
-import worker from '../public/_worker.js';
+import worker from '../public/_worker.js/index.js';
 import {runtime} from '../scripts/local-runtime.mjs';
 
 const ctx={};ctx.window=ctx;vm.createContext(ctx);

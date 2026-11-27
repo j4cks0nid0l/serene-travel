@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {pbkdf2Sync} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
-import worker, {sanitize} from '../public/_worker.js';
+import worker, {sanitize} from '../public/_worker.js/index.js';
 import {runtime} from '../scripts/local-runtime.mjs';
 
 const pass = 'Only-for-local-tests-Change-This-123!';
@@ -110,9 +110,10 @@ test('Admin pages use a CSP without inline scripts; booking and public keep thei
     assert.match(admin, /script-src 'self';/);
     assert.doesNotMatch(admin, /script-src[^;]*unsafe-inline/);
     assert.match(await csp('/admin/bai-dang/'), /script-src 'self';/);
-    // Trang booking và trang công khai giữ CSP cũ, vì còn script inline.
+    // Trang booking còn script inline nên giữ CSP riêng; trang công khai đã bỏ script inline.
     assert.match(await csp('/admin/booking/'), /unsafe-inline/);
-    assert.match(await csp('/'), /script-src 'self' 'unsafe-inline'/);
+    assert.match(await csp('/'), /script-src 'self';/);
+    assert.doesNotMatch(await csp('/'), /script-src[^;]*unsafe-inline/);
   } finally {
     env.close?.();
   }
