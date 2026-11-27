@@ -1,0 +1,2 @@
+// Khi mở trực tiếp file (file://), hiện lời nhắc dẫn sang bản xem thử.
+if(location.protocol==='file:'){document.addEventListener('DOMContentLoaded',()=>{const note=document.createElement('div');note.className='demo-banner';note.append('Đây là file quản trị dành cho website đã kết nối máy chủ. Để xem giao diện ngay, mở ');const a=document.createElement('a');a.href='../../../serene-travel-admin-preview.html';a.textContent='bản xem thử không cần mật khẩu';note.append(a);document.getElementById('login').prepend(note)})}
