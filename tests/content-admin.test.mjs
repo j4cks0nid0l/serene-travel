@@ -124,3 +124,29 @@ test('Admin page has no inline script', async () => {
   const inline = [...html.matchAll(/<script(\s[^>]*)?>([\s\S]*?)<\/script>/g)].filter((m) => !/\bsrc=/.test(m[1] || '') && m[2].trim());
   assert.equal(inline.length, 0);
 });
+
+test('Hotels and display flags: a hotel needs only a name; flags are validated and published', async () => {
+  const env = await runtime({passwordHash: hash});
+  const s = await session(env);
+  try {
+    await s.login();
+    // Khách sạn chỉ cần tên để đăng.
+    const hotel = {title: 'Khách sạn thử', summary: '', body: '', location: 'Trung tâm Nha Trang', tags: 'Mặt biển, 5 sao', home: '1', featured: '', cover: ''};
+    assert.equal((await s.call('content/hotel-quality-test', 'PUT', {data: hotel, mode: 'publish'})).status, 200);
+    const pub = (await (await worker.fetch(new Request(origin + '/api/public'), env)).json()).items.find((x) => x.id === 'hotel-quality-test');
+    assert.equal(pub.home, '1');
+    assert.equal(pub.location, 'Trung tâm Nha Trang');
+    assert.equal(pub.tags, 'Mặt biển, 5 sao');
+
+    // Dịch vụ được đánh dấu "Được chọn nhiều" vẫn cần mô tả và nội dung khi đăng.
+    assert.equal((await s.call('content/' + SERVICE, 'PUT', {data: fullService({featured: '1'}), mode: 'publish'})).status, 200);
+    const svc = (await (await worker.fetch(new Request(origin + '/api/public'), env)).json()).items.find((x) => x.id === SERVICE);
+    assert.equal(svc.featured, '1');
+
+    // Cờ chỉ nhận '1' hoặc rỗng.
+    const bad = await s.call('content/' + SERVICE, 'PUT', {data: fullService({featured: 'yes'}), mode: 'draft'});
+    assert.equal(bad.status, 400);
+  } finally {
+    env.close?.();
+  }
+});

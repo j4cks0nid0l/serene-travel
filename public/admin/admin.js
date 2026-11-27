@@ -85,6 +85,7 @@ function hasContent(html) {
 }
 function publishProblem(p, id) {
   if (id === 'settings') return '';
+  if (id.startsWith('hotel-')) return p.title?.trim() ? '' : 'Cần có tên khách sạn trước khi đăng.';
   if (!p.summary?.trim()) return 'Cần có mô tả ngắn trước khi đăng.';
   if (!hasContent(p.body || '')) return 'Cần có nội dung trước khi đăng.';
   return '';
@@ -195,7 +196,7 @@ function contentOf(id) {
 }
 function pageData(id) {
   const p = contentOf(id);
-  return Object.fromEntries(['title', 'summary', 'category', 'author', 'body', 'cover', 'places'].map((k) => [k, p[k] || '']));
+  return Object.fromEntries(['title', 'summary', 'category', 'author', 'body', 'cover', 'places', 'featured', 'home', 'location', 'tags'].map((k) => [k, p[k] || '']));
 }
 function available() {
   const result = new Map(state.defaults.map((x) => [x.id, x]));
@@ -457,7 +458,8 @@ function renderNav() {
   // Dịch vụ
   const all = available().filter((x) => x.id !== 'settings');
   const services = all.filter((x) => x.id.startsWith('service-'));
-  const posts = all.filter((x) => !x.id.startsWith('service-'));
+  const hotels = all.filter((x) => x.id.startsWith('hotel-'));
+  const posts = all.filter((x) => !x.id.startsWith('service-') && !x.id.startsWith('hotel-'));
   const placed = new Set();
   const groups = [];
   for (const g of SERVICE_GROUPS) {
@@ -468,6 +470,12 @@ function renderNav() {
   const rest = services.filter((x) => !placed.has(x.id));
   if (rest.length) groups.push(navGroup('other-services', 'Dịch vụ khác', rest.map(pageItem)));
   if (groups.some(Boolean)) append(navLabel('Dịch vụ', services.length), ...groups);
+
+  // Khách sạn hiển thị ở trang chủ (khi đánh dấu) và được quản lý tại đây.
+  const addHotel = el('button', 'primary new-post', '+ Thêm khách sạn');
+  addHotel.type = 'button';
+  addHotel.onclick = newHotel;
+  append(navLabel('Khách sạn', hotels.length), addHotel, ...hotels.map(pageItem).map(navButton));
 
   // Cẩm nang
   const newPostButton = el('button', 'primary new-post', '+ Viết bài cẩm nang');
@@ -601,6 +609,7 @@ function open(id, force = false, sec) {
   } else {
     $('page-title').textContent = p.title || 'Bài viết mới';
     for (const key of ['title', 'summary', 'category', 'author', 'cover']) $(key).value = p[key] || '';
+    showDisplayFields(id, p);
     renderPlaces(id.startsWith('post-') ? p.places : '');
     $('body').innerHTML = cleanHtml(p.body);
     updateCover();
@@ -671,6 +680,10 @@ function data() {
     body: $('body').innerHTML,
     cover: $('cover').value,
     places: placesValue(),
+    featured: $('featured').checked ? '1' : '',
+    home: $('home').checked ? '1' : '',
+    location: $('location').value,
+    tags: $('tags').value,
   };
 }
 
@@ -703,6 +716,31 @@ async function save(mode) {
   } finally {
     buttons.forEach((b) => (b.disabled = false));
   }
+}
+
+// Hiển thị các ô đánh dấu theo loại mục: dịch vụ (menu, trang chủ tour), khách sạn (trang chủ, vị trí, tiện ích).
+function showDisplayFields(id, p) {
+  const isService = id.startsWith('service-');
+  const isHotel = id.startsWith('hotel-');
+  const isTour = id.startsWith('service-tour');
+  $('display-card').hidden = !(isService || isHotel);
+  $('featured-field').hidden = !isService;
+  $('home-field').hidden = !(isHotel || isTour);
+  $('location-field').hidden = !isHotel;
+  $('tags-field').hidden = !isHotel;
+  $('featured').checked = p.featured === '1';
+  $('home').checked = p.home === '1';
+  $('location').value = p.location || '';
+  $('tags').value = p.tags || '';
+}
+
+function newHotel() {
+  if (state.dirty && !confirm('Có thay đổi chưa lưu. Bỏ thay đổi để thêm khách sạn?')) return;
+  state.dirty = false;
+  const id = 'hotel-' + crypto.randomUUID();
+  state.defaults.push({ id, title: '', body: '', author: '', category: '', places: '-', featured: '', home: '', location: '', tags: '' });
+  open(id, true);
+  $('title').focus();
 }
 
 function newPost() {

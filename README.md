@@ -29,7 +29,7 @@ File mở trực tiếp bằng trình duyệt (file://) chỉ để xem giao di�
 
 1. Đưa **nội dung thư mục này** lên một repository GitHub, nên dùng repository riêng tư. Giữ `.gitignore`; không đưa `.dev.vars`, `node_modules`, `.wrangler` hay mật khẩu lên Git.
 2. Tạo D1 database `serene-content` (binding **DB**). Trong tab Console, chạy lần lượt `schema.sql`, `schema-posts.sql`, rồi `seed.sql`.
-   Tạo D1 database `serene-bookings` (binding **BOOKINGS**) và chạy `schema-bookings.sql`. Đây là toàn bộ bảng cần có; file trong `migrations/` chỉ dùng khi nâng cấp database tạo từ bản cũ.
+   Tạo D1 database `serene-bookings` (binding **BOOKINGS**) và chạy `schema-bookings.sql`. Đây là toàn bộ bảng cần có; `migrations/2026-11-hotels-seed.sql` thêm 12 khách sạn vào dữ liệu quản trị (chạy một lần trên serene-content, cho cả database mới). Các file `migrations/2026-11-legacy-*.sql` chỉ dùng khi nâng cấp database tạo từ bản cũ.
 3. Tạo R2 bucket, ví dụ `serene-images`.
 4. Tạo Cloudflare Pages project từ repository GitHub. Build command để trống, output directory là **public**. Nếu repository chứa cả thư mục cha, đặt root directory là `serene-travel-v2.4`.
 5. Trong Pages Settings → Bindings, gắn D1 `serene-content` vào tên **DB**, D1 `serene-bookings` vào tên **BOOKINGS**, R2 vào tên **MEDIA**. Tên viết hoa phải đúng.
