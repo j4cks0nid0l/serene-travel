@@ -4,4 +4,5 @@ import {stdout} from 'node:process';
 const password=randomBytes(24).toString('base64url');
 const salt=randomBytes(24).toString('hex');
 const digest=pbkdf2Sync(password,salt,100000,32,'sha256').toString('hex');
-stdout.write('Tài khoản: serenetravelvn@gmail.com\nMật khẩu mới (lưu trong trình quản lý mật khẩu): '+password+'\n\nCloudflare Secret ADMIN_PASSWORD_HASH:\n'+salt+':'+digest+'\n');
+const email=process.env.ADMIN_EMAIL||process.argv[2]||'<email Chủ>';
+stdout.write('Tài khoản: '+email+'\nMật khẩu mới (lưu trong trình quản lý mật khẩu): '+password+'\n\nCloudflare Secret ADMIN_PASSWORD_HASH:\n'+salt+':'+digest+'\n');

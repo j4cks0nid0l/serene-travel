@@ -1,7 +1,7 @@
 import {createServer} from 'node:http';
 import {resolve} from 'node:path';
 import {mkdir,readFile} from 'node:fs/promises';
-import worker from '../public/_worker.js';
+import worker from '../public/_worker.js/index.js';
 import {runtime,root} from './local-runtime.mjs';
 await mkdir(resolve(root,'.wrangler'),{recursive:true});let secret=process.env.ADMIN_PASSWORD_HASH||'';
 try{const vars=await readFile(resolve(root,'.dev.vars'),'utf8');secret=secret||/^ADMIN_PASSWORD_HASH\s*=\s*"?([^"\r\n]+)"?$/m.exec(vars)?.[1]||''}catch{}

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {pbkdf2Sync} from 'node:crypto';
-import worker,{sanitize} from '../public/_worker.js';
+import worker,{sanitize} from '../public/_worker.js/index.js';
 import {runtime} from '../scripts/local-runtime.mjs';
 const pass='Only-for-local-tests-Change-This-123!';
 const hash='test-salt:'+pbkdf2Sync(pass,'test-salt',100000,32,'sha256').toString('hex');

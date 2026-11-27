@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash,pbkdf2Sync} from 'node:crypto';
-import worker from '../public/_worker.js';
+import worker from '../public/_worker.js/index.js';
 import {runtime} from '../scripts/local-runtime.mjs';
 const origin='https://serene-test.pages.dev';
 const hash='test-salt:'+pbkdf2Sync('x','test-salt',100000,32,'sha256').toString('hex');

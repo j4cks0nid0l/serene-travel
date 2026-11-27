@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash,pbkdf2Sync} from 'node:crypto';
-import worker from '../public/_worker.js';
+import worker from '../public/_worker.js/index.js';
 import {runtime} from '../scripts/local-runtime.mjs';
 const origin='https://serene-test.pages.dev';
 const pass='Only-for-local-tests-Change-This-123!';
